@@ -1,6 +1,9 @@
 services:
   armory:
-    build: .
+    image: ghcr.io/matsukami7/armory-app:latest
+    # To build locally instead of pulling from GHCR:
+    #   comment out the image line above and uncomment the build line below
+    # build: .
     container_name: armory
     restart: unless-stopped
     ports:

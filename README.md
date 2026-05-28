@@ -2,6 +2,9 @@
 
 A self-hosted firearms tracker and range log. Track your collection, document range sessions, log drills, and manage ammo inventory — all stored locally on your own hardware.
 
+- **GitHub:** https://github.com/Matsukami7/armory-app
+- **Image:** `ghcr.io/matsukami7/armory-app:latest`
+
 ---
 
 ## Features
@@ -52,25 +55,21 @@ That's it. No database to install, no external services.
 
 ---
 
-### Quick Start (Docker Compose)
+### Quick Start — Pull from Registry (Recommended)
 
-**1. Clone the repo**
+The pre-built image is published to GitHub Container Registry. No need to clone the repo or build anything.
+
+**1. Create a working directory and grab the Compose file**
 
 ```bash
-git clone <your-repo-url> armory
-cd armory
+mkdir armory && cd armory
+curl -O https://raw.githubusercontent.com/Matsukami7/armory-app/master/docker-compose.yml
 ```
 
 **2. Set your password**
 
 ```bash
-cp .env.example .env
-```
-
-Open `.env` and change `ARMORY_PASSWORD`:
-
-```env
-ARMORY_PASSWORD=your-secure-password-here
+echo "ARMORY_PASSWORD=your-secure-password-here" > .env
 ```
 
 > **Default password is `armory`.** A warning banner is shown on every page until you change it. Change it before putting this on your network.
@@ -78,8 +77,10 @@ ARMORY_PASSWORD=your-secure-password-here
 **3. Start the app**
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
+
+Docker will pull the image from GHCR automatically on first run.
 
 **4. Open it**
 
@@ -90,11 +91,36 @@ Navigate to `http://<your-server-ip>:4321` from any device on your network.
 ### Updating
 
 ```bash
-git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 Your data in `./data/` is never touched during updates.
+
+---
+
+### Quick Start — Build from Source
+
+If you want to modify the code or run without pulling from GHCR:
+
+```bash
+git clone https://github.com/Matsukami7/armory-app.git armory
+cd armory
+cp .env.example .env       # then edit ARMORY_PASSWORD
+```
+
+Edit `docker-compose.yml` and swap the image/build lines:
+
+```yaml
+# image: ghcr.io/matsukami7/armory-app:latest   ← comment this out
+build: .                                          # ← uncomment this
+```
+
+Then:
+
+```bash
+docker compose up -d --build
+```
 
 ---
 
@@ -113,7 +139,7 @@ The dev server starts at `http://localhost:4321` and initializes the database au
 
 ## Data & Backups
 
-All data is stored in the `data/` directory:
+All data is stored in the `data/` directory next to your `docker-compose.yml`:
 
 ```
 data/
@@ -191,6 +217,26 @@ The app runs on plain HTTP. Terminate TLS at your reverse proxy and forward to `
 
 ---
 
+## Publishing a New Image (Maintainers)
+
+When you want to ship an update to GHCR:
+
+```bash
+# 1. Log in to GHCR (only needed once per machine)
+echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+
+# 2. Build and push
+docker build -t ghcr.io/matsukami7/armory-app:latest .
+docker push ghcr.io/matsukami7/armory-app:latest
+
+# 3. Users update by running on their server:
+docker compose pull && docker compose up -d
+```
+
+To get a GitHub token: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → New token → check `write:packages`.
+
+---
+
 ## Security Notes
 
 - The app is designed for **local network use**. There is no multi-user support.
@@ -207,3 +253,4 @@ The app runs on plain HTTP. Terminate TLS at your reverse proxy and forward to `
 - **[Tailwind CSS v4](https://tailwindcss.com)** — Styling
 - **[Drizzle ORM](https://orm.drizzle.team)** + **[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)** — Database
 - **[Docker](https://docker.com)** — Containerized deployment
+- **[GHCR](https://ghcr.io)** — Image registry
