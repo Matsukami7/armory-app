@@ -19,158 +19,158 @@ if (Astro.request.method === 'POST') {
     await db.delete(firearms).where(eq(firearms.id, id));
     return Astro.redirect('/firearms');
   }
-
   if (action === 'upload_photo') {
     const file = form.get('photo') as File | null;
     if (file && file.size > 0) {
-      const photoPath = await saveUpload(file, `firearms`);
-      if (photoPath) {
-        await db.update(firearms).set({ photoPath }).where(eq(firearms.id, id));
-      }
+      const photoPath = await saveUpload(file, 'firearms');
+      if (photoPath) await db.update(firearms).set({ photoPath }).where(eq(firearms.id, id));
     }
     return Astro.redirect(`/firearms/${id}`);
   }
-
   if (action === 'add_maintenance') {
     await db.insert(maintenanceLogs).values({
-      firearmId: id,
-      date: form.get('date') as string,
-      type: form.get('type') as string,
-      notes: form.get('notes') as string,
+      firearmId:  id,
+      date:       form.get('date') as string,
+      type:       form.get('type') as string,
+      notes:      form.get('notes') as string,
       roundCount: form.get('roundCount') ? parseInt(form.get('roundCount') as string) : null,
     });
     return Astro.redirect(`/firearms/${id}`);
   }
-
   if (action === 'delete_log') {
-    const logId = parseInt(form.get('logId') as string);
-    await db.delete(maintenanceLogs).where(eq(maintenanceLogs.id, logId));
+    await db.delete(maintenanceLogs).where(eq(maintenanceLogs.id, parseInt(form.get('logId') as string)));
     return Astro.redirect(`/firearms/${id}`);
   }
-
   if (action === 'add_accessory') {
     await db.insert(accessories).values({
-      firearmId: id,
-      name: form.get('name') as string,
-      type: form.get('type') as string,
-      make: form.get('make') as string || null,
-      model: form.get('model') as string || null,
-      notes: form.get('notes') as string || null,
+      firearmId:     id,
+      name:          form.get('name') as string,
+      type:          form.get('type') as string,
+      make:          form.get('make') as string || null,
+      model:         form.get('model') as string || null,
+      notes:         form.get('notes') as string || null,
       purchasePrice: form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
     });
     return Astro.redirect(`/firearms/${id}`);
   }
-
   if (action === 'delete_accessory') {
-    const accId = parseInt(form.get('accId') as string);
-    await db.delete(accessories).where(eq(accessories.id, accId));
+    await db.delete(accessories).where(eq(accessories.id, parseInt(form.get('accId') as string)));
     return Astro.redirect(`/firearms/${id}`);
   }
 }
 
-// Re-fetch after possible update
-const [gun] = await db.select().from(firearms).where(eq(firearms.id, id));
-const accs = await db.select().from(accessories).where(eq(accessories.firearmId, id));
-const logs = await db.select().from(maintenanceLogs)
-  .where(eq(maintenanceLogs.firearmId, id))
-  .orderBy(desc(maintenanceLogs.date));
-const [roundsRow] = await db.select({ total: sum(sessionFirearms.roundsFired) })
-  .from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
-const totalRounds = roundsRow?.total ?? 0;
+const [gun]      = await db.select().from(firearms).where(eq(firearms.id, id));
+const accs       = await db.select().from(accessories).where(eq(accessories.firearmId, id));
+const logs       = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.firearmId, id)).orderBy(desc(maintenanceLogs.date));
+const [rRow]     = await db.select({ total: sum(sessionFirearms.roundsFired) }).from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
+const totalRounds = Number(rRow?.total ?? 0);
 
-const typeLabel: Record<string, string> = {
-  pistol: 'Pistol', rifle: 'Rifle', shotgun: 'Shotgun', revolver: 'Revolver', other: 'Other'
-};
-
-const logTypeIcon: Record<string, string> = {
-  cleaning: '🧹', repair: '🔧', inspection: '🔍', modification: '⚙️', note: '📝',
-};
+const typeLabel: Record<string, string> = { pistol:'Pistol', rifle:'Rifle', shotgun:'Shotgun', revolver:'Revolver', other:'Other' };
+const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', inspection:'🔍', modification:'⚙️', note:'📝' };
 ---
 
-<Layout title={gun.name} backHref="/firearms" backLabel="Firearms">
-  <div class="px-4 py-5 space-y-6">
+<Layout title={gun.name} sub={`${gun.make} ${gun.model}${gun.generation ? ` ${gun.generation}` : ''} · ${gun.caliber}`} backHref="/firearms">
+  <slot name="actions" slot="actions">
+    <a href={`/firearms/${id}/edit`} class="btn btn-secondary">Edit</a>
+  </slot>
 
-    <!-- Photo -->
-    <div class="relative">
-      {gun.photoPath ? (
-        <img
-          src={gun.photoPath}
-          alt={gun.name}
-          class="w-full h-52 object-cover rounded-xl bg-zinc-800"
-        />
-      ) : (
-        <div class="w-full h-36 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-600">
-          <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-      )}
-      <form method="POST" enctype="multipart/form-data" class="absolute bottom-2 right-2">
-        <input type="hidden" name="_action" value="upload_photo" />
-        <label class="btn-secondary py-1.5 px-3 text-xs cursor-pointer">
-          {gun.photoPath ? 'Change Photo' : '+ Photo'}
-          <input type="file" name="photo" accept="image/*" class="hidden" onchange="this.form.submit()" />
-        </label>
-      </form>
-    </div>
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:52rem">
 
-    <!-- Firearm details -->
-    <div class="card p-4 space-y-3">
-      <div class="flex items-start justify-between">
-        <div>
-          <h2 class="font-semibold">{gun.make} {gun.model}</h2>
-          <p class="text-sm text-zinc-500">{gun.caliber} · {typeLabel[gun.type] ?? gun.type}{gun.generation ? ` · ${gun.generation}` : ''}</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="text-right">
-            <div class="text-xl font-bold text-amber-400">{Number(totalRounds).toLocaleString()}</div>
-            <div class="text-xs text-zinc-500">rounds</div>
+    <!-- Photo + overview -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+
+      <!-- Photo -->
+      <div class="card" style="overflow:hidden;position:relative">
+        {gun.photoPath
+          ? <img src={gun.photoPath} alt={gun.name} style="width:100%;height:14rem;object-fit:cover;display:block" />
+          : <div style="height:14rem;display:flex;align-items:center;justify-content:center;color:var(--text-dim)">
+              <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+            </div>
+        }
+        <form method="POST" enctype="multipart/form-data" style="position:absolute;bottom:0.625rem;right:0.625rem">
+          <input type="hidden" name="_action" value="upload_photo" />
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer">
+            {gun.photoPath ? 'Change' : '+ Photo'}
+            <input type="file" name="photo" accept="image/*" style="display:none" onchange="this.form.submit()" />
+          </label>
+        </form>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:flex;flex-direction:column;gap:0.75rem">
+        <div class="stat-card" style="flex:1">
+          <div>
+            <div class="stat-card-label">Rounds Fired</div>
+            <div class="stat-card-value" style="color:#f97316">{totalRounds.toLocaleString()}</div>
+            <div class="stat-card-sub">lifetime total</div>
           </div>
-          <a href={`/firearms/${id}/edit`} class="btn-secondary py-1.5 px-3 text-xs">Edit</a>
+        </div>
+        {gun.purchasePrice && (
+          <div class="stat-card" style="flex:1">
+            <div>
+              <div class="stat-card-label">Purchase Price</div>
+              <div class="stat-card-value" style="color:#22c55e">${gun.purchasePrice.toFixed(2)}</div>
+              {gun.purchaseDate && <div class="stat-card-sub">{gun.purchaseDate}</div>}
+            </div>
+          </div>
+        )}
+        {gun.serial && (
+          <div class="card" style="padding:1rem">
+            <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem">Serial</div>
+            <div style="font-family:ui-monospace,monospace;font-size:0.875rem;color:var(--text)">{gun.serial}</div>
+          </div>
+        )}
+        <div style="display:flex;gap:0.5rem">
+          <span class="pill pill-accent">{typeLabel[gun.type] ?? gun.type}</span>
+          <span class="pill pill-default">{gun.caliber}</span>
+          {gun.generation && <span class="pill pill-default">{gun.generation}</span>}
         </div>
       </div>
 
-      {gun.serial && <div class="text-xs text-zinc-500">S/N: {gun.serial}</div>}
-
-      <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {gun.purchaseDate && <div><span class="text-zinc-500">Bought:</span> {gun.purchaseDate}</div>}
-        {gun.purchasePrice && <div><span class="text-zinc-500">Paid:</span> ${gun.purchasePrice.toFixed(2)}</div>}
-      </div>
-
-      {gun.notes && <p class="text-sm text-zinc-400 italic border-t border-zinc-800 pt-3">{gun.notes}</p>}
     </div>
+
+    {gun.notes && (
+      <div class="card" style="padding:1.25rem">
+        <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem">Notes</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);line-height:1.6">{gun.notes}</p>
+      </div>
+    )}
 
     <!-- Accessories -->
     <div>
-      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Accessories</h2>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◈</span>
+        <span class="section-title">Accessories</span>
+      </div>
       {accs.length > 0 && (
-        <div class="card divide-y divide-zinc-800 mb-3">
+        <div class="card card-divide" style="margin-bottom:0.75rem">
           {accs.map(a => (
-            <div class="px-4 py-3 flex items-start justify-between gap-2">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium">{a.name}</div>
-                <div class="text-xs text-zinc-500">{a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}</div>
-                {a.notes && <div class="text-xs text-zinc-400 mt-1">{a.notes}</div>}
+            <div class="list-row" style="justify-content:space-between">
+              <div>
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{a.name}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">
+                  {a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}
+                  {a.purchasePrice ? ` · $${a.purchasePrice.toFixed(2)}` : ''}
+                </div>
+                {a.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{a.notes}</div>}
               </div>
               <form method="POST">
                 <input type="hidden" name="_action" value="delete_accessory" />
                 <input type="hidden" name="accId" value={a.id} />
-                <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+                <button type="submit" class="btn-delete">✕</button>
               </form>
             </div>
           ))}
         </div>
       )}
-
-      <details class="card">
-        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Add Accessory</summary>
-        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+      <details class="accordion">
+        <summary>+ Add Accessory</summary>
+        <form method="POST" class="form-section">
           <input type="hidden" name="_action" value="add_accessory" />
-          <div>
-            <label>Name *</label>
-            <input name="name" type="text" required placeholder="Trijicon RMR" />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div><label>Name *</label><input name="name" type="text" required placeholder="Trijicon RMR" /></div>
+          <div class="form-row form-row-2">
             <div>
               <label>Type</label>
               <select name="type">
@@ -183,69 +183,52 @@ const logTypeIcon: Record<string, string> = {
                 <option value="other">Other</option>
               </select>
             </div>
-            <div>
-              <label>Price ($)</label>
-              <input name="purchasePrice" type="number" step="0.01" min="0" />
-            </div>
+            <div><label>Price ($)</label><input name="purchasePrice" type="number" step="0.01" min="0" /></div>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label>Make</label>
-              <input name="make" type="text" />
-            </div>
-            <div>
-              <label>Model</label>
-              <input name="model" type="text" />
-            </div>
+          <div class="form-row form-row-2">
+            <div><label>Make</label><input name="make" type="text" /></div>
+            <div><label>Model</label><input name="model" type="text" /></div>
           </div>
-          <div>
-            <label>Notes</label>
-            <textarea name="notes" rows="2"></textarea>
-          </div>
-          <button type="submit" class="btn-primary w-full">Add</button>
+          <div><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+          <button type="submit" class="btn btn-primary">Add Accessory</button>
         </form>
       </details>
     </div>
 
-    <!-- Log (maintenance + notes) -->
+    <!-- Log -->
     <div>
-      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Log</h2>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">≡</span>
+        <span class="section-title">Firearm Log</span>
+      </div>
       {logs.length > 0 && (
-        <div class="card divide-y divide-zinc-800 mb-3">
+        <div class="card card-divide" style="margin-bottom:0.75rem">
           {logs.map(l => (
-            <div class="px-4 py-3">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="text-base leading-none">{logTypeIcon[l.type] ?? '📋'}</span>
-                    <span class="text-sm font-medium capitalize">{l.type}</span>
-                    <span class="text-xs text-zinc-500">{l.date}</span>
-                  </div>
-                  <div class="text-sm text-zinc-400 mt-1 ml-6">{l.notes}</div>
-                  {l.roundCount && (
-                    <div class="text-xs text-zinc-500 mt-1 ml-6">{l.roundCount.toLocaleString()} rounds at service</div>
-                  )}
+            <div class="list-row" style="justify-content:space-between;align-items:flex-start">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">
+                  <span>{logIcon[l.type] ?? '📋'}</span>
+                  <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">{l.type}</span>
+                  <span style="font-size:0.7rem;color:var(--text-dim)">{l.date}</span>
                 </div>
-                <form method="POST" class="flex-shrink-0">
-                  <input type="hidden" name="_action" value="delete_log" />
-                  <input type="hidden" name="logId" value={l.id} />
-                  <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
-                </form>
+                <div style="font-size:0.875rem;color:var(--text);padding-left:1.5rem">{l.notes}</div>
+                {l.roundCount && <div style="font-size:0.7rem;color:var(--text-dim);padding-left:1.5rem;margin-top:0.125rem">{l.roundCount.toLocaleString()} rounds at service</div>}
               </div>
+              <form method="POST">
+                <input type="hidden" name="_action" value="delete_log" />
+                <input type="hidden" name="logId" value={l.id} />
+                <button type="submit" class="btn-delete">✕</button>
+              </form>
             </div>
           ))}
         </div>
       )}
-
-      <details class="card">
-        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Add Log Entry</summary>
-        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+      <details class="accordion">
+        <summary>+ Add Log Entry</summary>
+        <form method="POST" class="form-section">
           <input type="hidden" name="_action" value="add_maintenance" />
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label>Date *</label>
-              <input name="date" type="date" required />
-            </div>
+          <div class="form-row form-row-2">
+            <div><label>Date *</label><input name="date" type="date" required /></div>
             <div>
               <label>Type</label>
               <select name="type">
@@ -257,23 +240,17 @@ const logTypeIcon: Record<string, string> = {
               </select>
             </div>
           </div>
-          <div>
-            <label>Notes *</label>
-            <textarea name="notes" rows="3" required placeholder="What happened, what was done..."></textarea>
-          </div>
-          <div>
-            <label>Round Count at Service</label>
-            <input name="roundCount" type="number" min="0" placeholder="Optional — for maintenance entries" />
-          </div>
-          <button type="submit" class="btn-primary w-full">Save Entry</button>
+          <div><label>Notes *</label><textarea name="notes" rows="3" required placeholder="What happened, what was done..."></textarea></div>
+          <div><label>Round Count at Service</label><input name="roundCount" type="number" min="0" placeholder="Optional" /></div>
+          <button type="submit" class="btn btn-primary">Save Entry</button>
         </form>
       </details>
     </div>
 
     <!-- Delete -->
-    <form method="POST" onsubmit="return confirm('Delete this firearm and all its records? This cannot be undone.')">
+    <form method="POST" onsubmit="return confirm('Delete this firearm and all its records?')">
       <input type="hidden" name="_action" value="delete" />
-      <button type="submit" class="btn-danger w-full">Delete Firearm</button>
+      <button type="submit" class="btn btn-danger btn-full">Delete Firearm</button>
     </form>
 
   </div>

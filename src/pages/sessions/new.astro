@@ -1,55 +1,39 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { rangeSessions, firearms } from '../../db/schema';
+import { rangeSessions } from '../../db/schema';
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   const [inserted] = await db.insert(rangeSessions).values({
-    date: form.get('date') as string,
-    location: form.get('location') as string || null,
+    date:            form.get('date') as string,
+    location:        form.get('location') as string || null,
     durationMinutes: form.get('durationMinutes') ? parseInt(form.get('durationMinutes') as string) : null,
-    weather: form.get('weather') as string || null,
-    notes: form.get('notes') as string || null,
+    weather:         form.get('weather') as string || null,
+    notes:           form.get('notes') as string || null,
   }).returning({ id: rangeSessions.id });
   return Astro.redirect(`/sessions/${inserted.id}`);
 }
 
-const allFirearms = await db.select().from(firearms);
 const today = new Date().toISOString().split('T')[0];
 ---
 
-<Layout title="Log Session" backHref="/sessions" backLabel="Sessions">
-  <form method="POST" class="px-4 py-5 space-y-4">
+<Layout title="Log Session" backHref="/sessions">
+  <form method="POST" class="form-section" style="max-width:36rem">
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label for="date">Date *</label>
-        <input id="date" name="date" type="date" required value={today} />
-      </div>
-      <div>
-        <label for="durationMinutes">Duration (min)</label>
-        <input id="durationMinutes" name="durationMinutes" type="number" min="1" placeholder="60" />
-      </div>
+    <div class="form-row form-row-2">
+      <div><label>Date *</label><input name="date" type="date" required value={today} /></div>
+      <div><label>Duration (min)</label><input name="durationMinutes" type="number" min="1" placeholder="60" /></div>
     </div>
 
-    <div>
-      <label for="location">Location / Range</label>
-      <input id="location" name="location" type="text" placeholder="e.g. Oakwood Indoor Range" />
-    </div>
+    <div><label>Location / Range</label><input name="location" type="text" placeholder="e.g. Oakwood Indoor Range" /></div>
 
-    <div>
-      <label for="weather">Weather / Conditions</label>
-      <input id="weather" name="weather" type="text" placeholder="e.g. Sunny, 75°F, light wind" />
-    </div>
+    <div><label>Weather / Conditions</label><input name="weather" type="text" placeholder="e.g. Sunny, 75°F, light wind" /></div>
 
-    <div>
-      <label for="notes">Session Notes</label>
-      <textarea id="notes" name="notes" rows="3" placeholder="General observations, goals, etc."></textarea>
-    </div>
+    <div><label>Session Notes</label><textarea name="notes" rows="3" placeholder="Goals, observations, etc."></textarea></div>
 
-    <p class="text-xs text-zinc-500">You can add firearms, ammo used, and drills after saving.</p>
+    <p style="font-size:0.75rem;color:var(--text-muted)">Firearms, ammo, and drills can be added after saving.</p>
 
-    <button type="submit" class="btn-primary w-full">Create Session</button>
+    <button type="submit" class="btn btn-primary btn-full">Create Session</button>
   </form>
 </Layout>

@@ -18,106 +18,111 @@ if (Astro.request.method === 'POST') {
     await db.delete(rangeSessions).where(eq(rangeSessions.id, id));
     return Astro.redirect('/sessions');
   }
-
   if (action === 'add_firearm') {
-    const firearmId = parseInt(form.get('firearmId') as string);
+    const firearmId  = parseInt(form.get('firearmId') as string);
     const roundsFired = parseInt(form.get('roundsFired') as string) || 0;
-    const ammoId = form.get('ammoId') ? parseInt(form.get('ammoId') as string) : null;
+    const ammoId     = form.get('ammoId') ? parseInt(form.get('ammoId') as string) : null;
     await db.insert(sessionFirearms).values({ sessionId: id, firearmId, roundsFired, ammoId });
-    if (ammoId && roundsFired > 0) {
+    if (ammoId && roundsFired > 0)
       await db.run(sql`UPDATE ammo_inventory SET quantity = MAX(0, quantity - ${roundsFired}) WHERE id = ${ammoId}`);
-    }
   }
-
   if (action === 'remove_firearm') {
-    const sfId = parseInt(form.get('sfId') as string);
-    await db.delete(sessionFirearms).where(eq(sessionFirearms.id, sfId));
+    await db.delete(sessionFirearms).where(eq(sessionFirearms.id, parseInt(form.get('sfId') as string)));
   }
-
   if (action === 'add_drill') {
     await db.insert(drills).values({
-      sessionId: id,
-      firearmId: form.get('firearmId') ? parseInt(form.get('firearmId') as string) : null,
-      name: form.get('name') as string,
-      distance: form.get('distance') as string || null,
-      score: form.get('score') as string || null,
-      notes: form.get('notes') as string || null,
+      sessionId:  id,
+      firearmId:  form.get('firearmId') ? parseInt(form.get('firearmId') as string) : null,
+      name:       form.get('name') as string,
+      distance:   form.get('distance') as string || null,
+      score:      form.get('score') as string || null,
+      notes:      form.get('notes') as string || null,
     });
   }
-
   if (action === 'remove_drill') {
-    const drillId = parseInt(form.get('drillId') as string);
-    await db.delete(drills).where(eq(drills.id, drillId));
+    await db.delete(drills).where(eq(drills.id, parseInt(form.get('drillId') as string)));
   }
-
   return Astro.redirect(`/sessions/${id}`);
 }
 
 const sessionGuns = await db
   .select({ sf: sessionFirearms, f: firearms, a: ammoInventory })
   .from(sessionFirearms)
-  .leftJoin(firearms, eq(sessionFirearms.firearmId, firearms.id))
+  .leftJoin(firearms,      eq(sessionFirearms.firearmId, firearms.id))
   .leftJoin(ammoInventory, eq(sessionFirearms.ammoId, ammoInventory.id))
   .where(eq(sessionFirearms.sessionId, id));
 
 const sessionDrills = await db.select().from(drills).where(eq(drills.sessionId, id));
-const allFirearms = await db.select().from(firearms);
-const allAmmo = await db.select().from(ammoInventory);
-
-const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
+const allFirearms   = await db.select().from(firearms);
+const allAmmo       = await db.select().from(ammoInventory);
+const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
 ---
 
-<Layout title={`Session — ${session.date}`} backHref="/sessions" backLabel="Sessions">
-  <div class="px-4 py-5 space-y-6">
+<Layout
+  title={`Session · ${session.date}`}
+  sub={[session.location, session.durationMinutes ? `${session.durationMinutes}min` : null].filter(Boolean).join(' · ')}
+  backHref="/sessions"
+>
+  <slot name="actions" slot="actions">
+    <a href={`/sessions/${id}/edit`} class="btn btn-secondary">Edit</a>
+  </slot>
 
-    <!-- Session header -->
-    <div class="card p-4 space-y-2">
-      <div class="flex justify-between items-start">
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:52rem">
+
+    <!-- Overview -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem">
+      <div class="stat-card">
         <div>
-          <div class="font-semibold">{session.date}</div>
-          {session.location && <div class="text-sm text-zinc-500">{session.location}</div>}
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="text-right">
-            <div class="text-xl font-bold text-amber-400">{totalRounds.toLocaleString()}</div>
-            <div class="text-xs text-zinc-500">rounds</div>
-          </div>
-          <a href={`/sessions/${id}/edit`} class="btn-secondary py-1.5 px-3 text-xs">Edit</a>
+          <div class="stat-card-label">Rounds Fired</div>
+          <div class="stat-card-value" style="color:#f97316">{totalRounds.toLocaleString()}</div>
         </div>
       </div>
-      {session.durationMinutes && <div class="text-sm text-zinc-500">{session.durationMinutes} min</div>}
-      {session.weather && <div class="text-sm text-zinc-400">{session.weather}</div>}
-      {session.notes && <p class="text-sm text-zinc-400 italic border-t border-zinc-800 pt-2">{session.notes}</p>}
+      {session.weather && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Conditions</div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--text);margin-top:0.25rem">{session.weather}</div>
+          </div>
+        </div>
+      )}
     </div>
+
+    {session.notes && (
+      <div class="card" style="padding:1.25rem">
+        <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem">Session Notes</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);line-height:1.6">{session.notes}</p>
+      </div>
+    )}
 
     <!-- Firearms used -->
     <div>
-      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Firearms Used</h2>
-
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◉</span>
+        <span class="section-title">Firearms Used</span>
+      </div>
       {sessionGuns.length > 0 && (
-        <div class="card divide-y divide-zinc-800 mb-3">
+        <div class="card card-divide" style="margin-bottom:0.75rem">
           {sessionGuns.map(r => (
-            <div class="flex items-center justify-between px-4 py-3 gap-2">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium">{r.f?.name ?? 'Unknown'}</div>
-                {r.a && <div class="text-xs text-zinc-500">{r.a.brand} {r.a.grain}gr {r.a.caliber}</div>}
+            <div class="list-row" style="justify-content:space-between">
+              <div>
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{r.f?.name ?? 'Unknown'}</div>
+                {r.a && <div style="font-size:0.75rem;color:var(--text-muted)">{r.a.brand} {r.a.grain}gr {r.a.caliber}</div>}
               </div>
-              <div class="flex items-center gap-3 flex-shrink-0">
-                <span class="text-sm font-semibold text-amber-400">{r.sf.roundsFired} rds</span>
+              <div style="display:flex;align-items:center;gap:0.75rem">
+                <span style="font-size:0.875rem;font-weight:700;color:#f97316">{r.sf.roundsFired} rds</span>
                 <form method="POST">
                   <input type="hidden" name="_action" value="remove_firearm" />
                   <input type="hidden" name="sfId" value={r.sf.id} />
-                  <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+                  <button type="submit" class="btn-delete">✕</button>
                 </form>
               </div>
             </div>
           ))}
         </div>
       )}
-
-      <details class="card">
-        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Add Firearm</summary>
-        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+      <details class="accordion">
+        <summary>+ Add Firearm</summary>
+        <form method="POST" class="form-section">
           <input type="hidden" name="_action" value="add_firearm" />
           <div>
             <label>Firearm *</label>
@@ -126,11 +131,8 @@ const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
               {allFirearms.map(f => <option value={f.id}>{f.name} ({f.caliber})</option>)}
             </select>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label>Rounds Fired</label>
-              <input name="roundsFired" type="number" min="0" placeholder="0" />
-            </div>
+          <div class="form-row form-row-2">
+            <div><label>Rounds Fired</label><input name="roundsFired" type="number" min="0" placeholder="0" /></div>
             <div>
               <label>Ammo Used</label>
               <select name="ammoId">
@@ -139,56 +141,46 @@ const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
               </select>
             </div>
           </div>
-          <button type="submit" class="btn-primary w-full">Add</button>
+          <button type="submit" class="btn btn-primary">Add</button>
         </form>
       </details>
     </div>
 
     <!-- Drills -->
     <div>
-      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Drills</h2>
-
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◎</span>
+        <span class="section-title">Drills</span>
+      </div>
       {sessionDrills.length > 0 && (
-        <div class="card divide-y divide-zinc-800 mb-3">
+        <div class="card card-divide" style="margin-bottom:0.75rem">
           {sessionDrills.map(d => (
-            <div class="px-4 py-3">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium">{d.name}</span>
-                    {d.score && <span class="text-sm font-semibold text-amber-400">{d.score}</span>}
-                  </div>
-                  {d.distance && <div class="text-xs text-zinc-500">{d.distance}</div>}
-                  {d.notes && <div class="text-sm text-zinc-400 mt-1">{d.notes}</div>}
+            <div class="list-row" style="justify-content:space-between;align-items:flex-start">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:0.75rem">
+                  <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{d.name}</span>
+                  {d.score && <span class="pill pill-accent">{d.score}</span>}
                 </div>
-                <form method="POST" class="flex-shrink-0">
-                  <input type="hidden" name="_action" value="remove_drill" />
-                  <input type="hidden" name="drillId" value={d.id} />
-                  <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
-                </form>
+                {d.distance && <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">{d.distance}</div>}
+                {d.notes && <div style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.25rem">{d.notes}</div>}
               </div>
+              <form method="POST">
+                <input type="hidden" name="_action" value="remove_drill" />
+                <input type="hidden" name="drillId" value={d.id} />
+                <button type="submit" class="btn-delete">✕</button>
+              </form>
             </div>
           ))}
         </div>
       )}
-
-      <details class="card">
-        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Log Drill</summary>
-        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+      <details class="accordion">
+        <summary>+ Log Drill</summary>
+        <form method="POST" class="form-section">
           <input type="hidden" name="_action" value="add_drill" />
-          <div>
-            <label>Drill Name *</label>
-            <input name="name" type="text" required placeholder="e.g. Dot Torture, FAST Drill" />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label>Distance</label>
-              <input name="distance" type="text" placeholder="e.g. 7 yards" />
-            </div>
-            <div>
-              <label>Score / Result</label>
-              <input name="score" type="text" placeholder="e.g. 48/50" />
-            </div>
+          <div><label>Drill Name *</label><input name="name" type="text" required placeholder="e.g. Dot Torture, FAST Drill" /></div>
+          <div class="form-row form-row-2">
+            <div><label>Distance</label><input name="distance" type="text" placeholder="e.g. 7 yards" /></div>
+            <div><label>Score / Result</label><input name="score" type="text" placeholder="e.g. 48/50" /></div>
           </div>
           <div>
             <label>Firearm</label>
@@ -197,19 +189,16 @@ const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
               {allFirearms.map(f => <option value={f.id}>{f.name}</option>)}
             </select>
           </div>
-          <div>
-            <label>Notes</label>
-            <textarea name="notes" rows="2" placeholder="Observations, what to work on, etc."></textarea>
-          </div>
-          <button type="submit" class="btn-primary w-full">Add Drill</button>
+          <div><label>Notes</label><textarea name="notes" rows="2" placeholder="Observations, what to work on..."></textarea></div>
+          <button type="submit" class="btn btn-primary">Add Drill</button>
         </form>
       </details>
     </div>
 
     <!-- Delete -->
-    <form method="POST" onsubmit="return confirm('Delete this session? This cannot be undone.')">
+    <form method="POST" onsubmit="return confirm('Delete this session?')">
       <input type="hidden" name="_action" value="delete" />
-      <button type="submit" class="btn-danger w-full">Delete Session</button>
+      <button type="submit" class="btn btn-danger btn-full">Delete Session</button>
     </form>
 
   </div>

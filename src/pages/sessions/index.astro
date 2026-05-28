@@ -9,45 +9,42 @@ const roundsBySession = await db
   .select({ sessionId: sessionFirearms.sessionId, total: sum(sessionFirearms.roundsFired) })
   .from(sessionFirearms)
   .groupBy(sessionFirearms.sessionId);
-
 const roundsMap = new Map(roundsBySession.map(r => [r.sessionId, Number(r.total)]));
 ---
 
-<Layout title="Range Sessions">
-  <div class="px-4 py-5">
-    <div class="flex items-center justify-between mb-4">
-      <span class="text-sm text-zinc-500">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
-      <a href="/sessions/new" class="btn-primary py-2">+ Log</a>
-    </div>
+<Layout title="Range" sub="Sessions & drills">
+  <slot name="actions" slot="actions">
+    <a href="/sessions/new" class="btn btn-primary">+ Log Session</a>
+  </slot>
 
-    {sessions.length === 0 ? (
-      <div class="text-center py-16 text-zinc-600">
-        <div class="text-4xl mb-3">🎯</div>
-        <p class="text-sm">No sessions logged yet.</p>
-        <a href="/sessions/new" class="btn-primary mt-4 inline-flex">Log a Session</a>
-      </div>
-    ) : (
-      <div class="card divide-y divide-zinc-800">
-        {sessions.map(s => (
-          <a href={`/sessions/${s.id}`} class="flex items-center justify-between px-4 py-3.5 hover:bg-zinc-800/50 transition-colors">
-            <div>
-              <div class="text-sm font-medium">{s.date}</div>
-              <div class="text-xs text-zinc-500">
-                {s.location ?? 'No location'}
-                {s.durationMinutes ? ` · ${s.durationMinutes}min` : ''}
-              </div>
+  {sessions.length === 0 ? (
+    <div class="empty-state">
+      <div class="empty-state-icon">🎯</div>
+      <div class="empty-state-text">No sessions logged yet.</div>
+      <a href="/sessions/new" class="btn btn-primary">Log a Session</a>
+    </div>
+  ) : (
+    <div class="card card-divide">
+      {sessions.map(s => (
+        <a href={`/sessions/${s.id}`} class="list-row list-row-link" style="justify-content:space-between">
+          <div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{s.date}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">
+              {s.location ?? 'No location'}{s.durationMinutes ? ` · ${s.durationMinutes}min` : ''}
             </div>
-            <div class="flex items-center gap-3">
-              {roundsMap.has(s.id) && (
-                <span class="text-sm font-semibold text-amber-400">{(roundsMap.get(s.id) ?? 0).toLocaleString()} rds</span>
-              )}
-              <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-          </a>
-        ))}
-      </div>
-    )}
-  </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            {roundsMap.has(s.id) && (
+              <span style="font-size:0.8125rem;font-weight:700;color:#f97316">
+                {(roundsMap.get(s.id) ?? 0).toLocaleString()} rds
+              </span>
+            )}
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--text-dim)">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </a>
+      ))}
+    </div>
+  )}
 </Layout>

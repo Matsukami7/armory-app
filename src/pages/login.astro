@@ -2,47 +2,47 @@
 import '../styles/global.css';
 import { isAuthenticated } from '../lib/auth';
 
-if (isAuthenticated(Astro.request)) {
-  return Astro.redirect('/');
-}
-
+if (isAuthenticated(Astro.request)) return Astro.redirect('/');
 const error = Astro.url.searchParams.get('error');
 ---
 
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-zinc-950">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Login — Armory</title>
-  </head>
-  <body class="h-full flex items-center justify-center px-6">
-    <div class="w-full max-w-sm">
-      <div class="text-center mb-8">
-        <div class="text-5xl mb-3">🔒</div>
-        <h1 class="text-2xl font-bold text-zinc-100">Armory</h1>
-        <p class="text-sm text-zinc-500 mt-1">Your personal range log</p>
+<html lang="en" data-theme="tactical">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login — Armory</title>
+</head>
+<body style="height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg-base);color:var(--text)">
+
+  <div style="width:100%;max-width:22rem;padding:1.5rem">
+
+    <!-- Brand -->
+    <div style="text-align:center;margin-bottom:2rem">
+      <div style="width:3rem;height:3rem;background:var(--accent-muted);border:1px solid var(--accent);border-radius:0.75rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;color:var(--accent)">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+        </svg>
+      </div>
+      <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem">Armory Platform</div>
+      <div style="font-size:1.5rem;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:var(--text)">Access Vault</div>
+    </div>
+
+    <form method="POST" action="/api/auth/login" style="background:var(--bg-card);border:1px solid var(--border);border-radius:0.75rem;padding:1.5rem;display:flex;flex-direction:column;gap:1rem">
+      <div>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" autofocus required placeholder="Enter password" />
       </div>
 
-      <form method="POST" action="/api/auth/login" class="card p-6 space-y-4">
-        <div>
-          <label for="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            autofocus
-            required
-          />
+      {error && (
+        <div style="font-size:0.8125rem;color:#f87171;padding:0.625rem;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:0.5rem">
+          {error === 'wrong' ? 'Incorrect password.' : 'Something went wrong.'}
         </div>
+      )}
 
-        {error && (
-          <p class="text-sm text-red-400">{error === 'wrong' ? 'Incorrect password.' : 'Something went wrong.'}</p>
-        )}
+      <button type="submit" class="btn btn-primary btn-full btn-lg">Unlock</button>
+    </form>
 
-        <button type="submit" class="btn-primary w-full">Unlock</button>
-      </form>
-    </div>
-  </body>
+  </div>
+</body>
 </html>

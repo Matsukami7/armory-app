@@ -4,77 +4,130 @@ import { db } from '../db';
 import { firearms, rangeSessions, ammoInventory, sessionFirearms } from '../db/schema';
 import { sql, sum, count } from 'drizzle-orm';
 
-const firearmCount = (await db.select({ c: count() }).from(firearms))[0].c;
-const sessionCount = (await db.select({ c: count() }).from(rangeSessions))[0].c;
-const totalRounds = (await db.select({ s: sum(sessionFirearms.roundsFired) }).from(sessionFirearms))[0].s ?? 0;
+const firearmCount   = (await db.select({ c: count() }).from(firearms))[0].c;
+const sessionCount   = (await db.select({ c: count() }).from(rangeSessions))[0].c;
+const totalRounds    = Number((await db.select({ s: sum(sessionFirearms.roundsFired) }).from(sessionFirearms))[0].s ?? 0);
+const totalInvest    = (await db.select().from(firearms)).reduce((s, f) => s + (f.purchasePrice ?? 0), 0);
 const recentSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`).limit(5);
-const lowAmmo = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
+const lowAmmo        = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
 ---
 
-<Layout title="Dashboard">
-  <div class="px-4 py-5 space-y-6">
+<Layout title="Command Center" sub="Tactical inventory overview">
+  <slot name="actions" slot="actions">
+    <div style="display:flex;gap:0.5rem">
+      <a href="/sessions/new" class="btn btn-primary">+ Log Session</a>
+      <a href="/firearms/new" class="btn btn-secondary">+ Add Firearm</a>
+    </div>
+  </slot>
 
-    <!-- Stats row -->
-    <div class="grid grid-cols-3 gap-3">
-      <div class="card p-4 text-center">
-        <div class="text-2xl font-bold text-amber-400">{firearmCount}</div>
-        <div class="text-xs text-zinc-500 mt-1">Firearms</div>
+  <div style="display:flex;flex-direction:column;gap:1.75rem">
+
+    <!-- Stat cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem">
+
+      <div class="stat-card">
+        <div>
+          <div class="stat-card-label">Total Firearms</div>
+          <div class="stat-card-value">{firearmCount}</div>
+          <div class="stat-card-sub">in vault</div>
+        </div>
+        <div class="stat-card-icon" style="background:rgba(6,182,212,0.1);color:#06b6d4">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+          </svg>
+        </div>
       </div>
-      <div class="card p-4 text-center">
-        <div class="text-2xl font-bold text-amber-400">{sessionCount}</div>
-        <div class="text-xs text-zinc-500 mt-1">Sessions</div>
+
+      <div class="stat-card">
+        <div>
+          <div class="stat-card-label">Range Sessions</div>
+          <div class="stat-card-value">{sessionCount}</div>
+          <div class="stat-card-sub">logged</div>
+        </div>
+        <div class="stat-card-icon" style="background:rgba(168,85,247,0.1);color:#a855f7">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+          </svg>
+        </div>
       </div>
-      <div class="card p-4 text-center">
-        <div class="text-2xl font-bold text-amber-400">{totalRounds.toLocaleString()}</div>
-        <div class="text-xs text-zinc-500 mt-1">Rounds</div>
+
+      <div class="stat-card">
+        <div>
+          <div class="stat-card-label">Total Rounds</div>
+          <div class="stat-card-value" style="color:#f97316">{totalRounds.toLocaleString()}</div>
+          <div class="stat-card-sub">fired all time</div>
+        </div>
+        <div class="stat-card-icon" style="background:rgba(249,115,22,0.1);color:#f97316">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div>
+          <div class="stat-card-label">Total Investment</div>
+          <div class="stat-card-value" style="color:#22c55e">${totalInvest.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+          <div class="stat-card-sub">firearms + accessories</div>
+        </div>
+        <div class="stat-card-icon" style="background:rgba(34,197,94,0.1);color:#22c55e">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Maintenance due placeholder -->
+    <div>
+      <div class="section-header">
+        <span style="color:#ef4444;font-size:0.75rem">●</span>
+        <span class="section-title">Maintenance Due</span>
+      </div>
+      <div class="card" style="padding:1.5rem;text-align:center;color:var(--text-dim);font-size:0.8125rem">
+        No firearms currently due for maintenance
       </div>
     </div>
 
-    <!-- Quick actions -->
-    <div class="grid grid-cols-2 gap-3">
-      <a href="/sessions/new" class="btn-primary justify-center py-3">
-        + Log Session
-      </a>
-      <a href="/firearms/new" class="btn-secondary justify-center py-3">
-        + Add Firearm
-      </a>
-    </div>
+    <!-- Low ammo -->
+    {lowAmmo.length > 0 && (
+      <div>
+        <div class="section-header">
+          <span style="color:#f97316;font-size:0.75rem">▲</span>
+          <span class="section-title">Low Ammo Alerts</span>
+        </div>
+        <div class="card card-divide">
+          {lowAmmo.map(a => (
+            <a href="/ammo" class="list-row list-row-link" style="justify-content:space-between">
+              <div>
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{a.brand} {a.grain ? `${a.grain}gr` : ''} {a.caliber}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">{a.type}</div>
+              </div>
+              <span style={`font-size:1rem;font-weight:800;color:${a.quantity < 50 ? '#f87171' : '#f97316'}`}>{a.quantity}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
 
     <!-- Recent sessions -->
     {recentSessions.length > 0 && (
       <div>
-        <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Recent Sessions</h2>
-        <div class="card divide-y divide-zinc-800">
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◎</span>
+          <span class="section-title">Recent Sessions</span>
+        </div>
+        <div class="card card-divide">
           {recentSessions.map(s => (
-            <a href={`/sessions/${s.id}`} class="flex items-center justify-between px-4 py-3 hover:bg-zinc-800/50 transition-colors">
+            <a href={`/sessions/${s.id}`} class="list-row list-row-link" style="justify-content:space-between">
               <div>
-                <div class="text-sm font-medium">{s.date}</div>
-                {s.location && <div class="text-xs text-zinc-500">{s.location}</div>}
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{s.date}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">{s.location ?? 'No location'}{s.durationMinutes ? ` · ${s.durationMinutes}min` : ''}</div>
               </div>
-              <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--text-dim)">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
               </svg>
-            </a>
-          ))}
-        </div>
-        {sessionCount > 5 && (
-          <a href="/sessions" class="block text-center text-xs text-amber-500 hover:text-amber-400 mt-3">View all sessions</a>
-        )}
-      </div>
-    )}
-
-    <!-- Low ammo warning -->
-    {lowAmmo.length > 0 && (
-      <div>
-        <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Low Ammo</h2>
-        <div class="card divide-y divide-zinc-800">
-          {lowAmmo.map(a => (
-            <a href="/ammo" class="flex items-center justify-between px-4 py-3 hover:bg-zinc-800/50 transition-colors">
-              <div>
-                <div class="text-sm font-medium">{a.brand} {a.grain}gr {a.caliber}</div>
-                <div class="text-xs text-zinc-500">{a.type}</div>
-              </div>
-              <span class={`text-sm font-semibold ${a.quantity < 50 ? 'text-red-400' : 'text-amber-400'}`}>{a.quantity}</span>
             </a>
           ))}
         </div>
@@ -82,10 +135,10 @@ const lowAmmo = await db.select().from(ammoInventory).where(sql`quantity < 100`)
     )}
 
     {firearmCount === 0 && sessionCount === 0 && (
-      <div class="text-center py-12 text-zinc-600">
-        <div class="text-4xl mb-3">🎯</div>
-        <p class="text-sm">Add your first firearm to get started.</p>
-        <a href="/firearms/new" class="btn-primary mt-4 inline-flex">Add Firearm</a>
+      <div class="empty-state">
+        <div class="empty-state-icon">🎯</div>
+        <div class="empty-state-text">Add your first firearm to get started.</div>
+        <a href="/firearms/new" class="btn btn-primary">Add Firearm</a>
       </div>
     )}
 

@@ -13,46 +13,30 @@ if (!session) return Astro.redirect('/sessions');
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   await db.update(rangeSessions).set({
-    date: form.get('date') as string,
-    location: form.get('location') as string || null,
+    date:            form.get('date') as string,
+    location:        form.get('location') as string || null,
     durationMinutes: form.get('durationMinutes') ? parseInt(form.get('durationMinutes') as string) : null,
-    weather: form.get('weather') as string || null,
-    notes: form.get('notes') as string || null,
+    weather:         form.get('weather') as string || null,
+    notes:           form.get('notes') as string || null,
   }).where(eq(rangeSessions.id, id));
   return Astro.redirect(`/sessions/${id}`);
 }
 ---
 
-<Layout title="Edit Session" backHref={`/sessions/${id}`} backLabel="Session">
-  <form method="POST" class="px-4 py-5 space-y-4">
+<Layout title="Edit Session" backHref={`/sessions/${id}`}>
+  <form method="POST" class="form-section" style="max-width:36rem">
 
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label for="date">Date *</label>
-        <input id="date" name="date" type="date" required value={session.date} />
-      </div>
-      <div>
-        <label for="durationMinutes">Duration (min)</label>
-        <input id="durationMinutes" name="durationMinutes" type="number" min="1"
-          value={session.durationMinutes ?? ''} />
-      </div>
+    <div class="form-row form-row-2">
+      <div><label>Date *</label><input name="date" type="date" required value={session.date} /></div>
+      <div><label>Duration (min)</label><input name="durationMinutes" type="number" min="1" value={session.durationMinutes ?? ''} /></div>
     </div>
 
-    <div>
-      <label for="location">Location / Range</label>
-      <input id="location" name="location" type="text" value={session.location ?? ''} />
-    </div>
+    <div><label>Location / Range</label><input name="location" type="text" value={session.location ?? ''} /></div>
 
-    <div>
-      <label for="weather">Weather / Conditions</label>
-      <input id="weather" name="weather" type="text" value={session.weather ?? ''} />
-    </div>
+    <div><label>Weather / Conditions</label><input name="weather" type="text" value={session.weather ?? ''} /></div>
 
-    <div>
-      <label for="notes">Session Notes</label>
-      <textarea id="notes" name="notes" rows="4">{session.notes ?? ''}</textarea>
-    </div>
+    <div><label>Session Notes</label><textarea name="notes" rows="4">{session.notes ?? ''}</textarea></div>
 
-    <button type="submit" class="btn-primary w-full">Save Changes</button>
+    <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
   </form>
 </Layout>
