@@ -12,5 +12,5 @@ services:
       - ./data:/data
     environment:
       - DB_PATH=/data/armory.db
-      # Default password is "armory" — change this before exposing to your network
-      - ARMORY_PASSWORD=${ARMORY_PASSWORD:-armory}
+      # Default password is "changeme" — change this before exposing to your network
+      - ARMORY_PASSWORD=${ARMORY_PASSWORD:-changeme}

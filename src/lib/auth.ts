@@ -1,6 +1,6 @@
 const SESSION_COOKIE = 'armory_session';
 const SESSION_TOKEN = 'authenticated';
-const DEFAULT_PASSWORD = 'armory';
+const DEFAULT_PASSWORD = 'changeme';
 
 export function checkPassword(input: string): boolean {
   const password = process.env.ARMORY_PASSWORD ?? DEFAULT_PASSWORD;

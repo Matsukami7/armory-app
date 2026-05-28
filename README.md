@@ -72,7 +72,7 @@ curl -O https://raw.githubusercontent.com/Matsukami7/armory-app/master/docker-co
 echo "ARMORY_PASSWORD=your-secure-password-here" > .env
 ```
 
-> **Default password is `armory`.** A warning banner is shown on every page until you change it. Change it before putting this on your network.
+> **Default password is `changeme`.** A warning banner is shown on every page until you change it. Change it before putting this on your network.
 
 **3. Start the app**
 
@@ -130,7 +130,7 @@ Requires Node.js 22+.
 
 ```bash
 npm install
-ARMORY_PASSWORD=armory npm run dev
+ARMORY_PASSWORD=changeme npm run dev
 ```
 
 The dev server starts at `http://localhost:4321` and initializes the database automatically on first run.
@@ -165,7 +165,7 @@ All configuration is via environment variables, set in `.env` or `docker-compose
 
 | Variable | Default | Description |
 |---|---|---|
-| `ARMORY_PASSWORD` | `armory` | Password to access the app. **Change this.** |
+| `ARMORY_PASSWORD` | `changeme` | Password to access the app. **Change this.** |
 | `DB_PATH` | `/data/armory.db` | Path to the SQLite database file |
 | `PORT` | `4321` | Port the app listens on |
 | `HOST` | `0.0.0.0` | Bind address |
