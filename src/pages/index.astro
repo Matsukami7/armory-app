@@ -1,8 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
-import { firearms, rangeSessions, ammoInventory, sessionFirearms } from '../db/schema';
-import { sql, sum, count } from 'drizzle-orm';
+import { firearms, rangeSessions, ammoInventory, sessionFirearms, maintenanceLogs } from '../db/schema';
+import { sql, sum, count, eq, and, isNotNull, desc } from 'drizzle-orm';
 
 const firearmCount   = (await db.select({ c: count() }).from(firearms))[0].c;
 const sessionCount   = (await db.select({ c: count() }).from(rangeSessions))[0].c;
@@ -10,6 +10,38 @@ const totalRounds    = Number((await db.select({ s: sum(sessionFirearms.roundsFi
 const totalInvest    = (await db.select().from(firearms)).reduce((s, f) => s + (f.purchasePrice ?? 0), 0);
 const recentSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`).limit(5);
 const lowAmmo        = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
+
+// Range spend: sum of rounds_fired * cost_per_round for all sessions with ammo linked
+const spendRows = await db
+  .select({ rounds: sessionFirearms.roundsFired, cpr: ammoInventory.costPerRound })
+  .from(sessionFirearms)
+  .leftJoin(ammoInventory, eq(sessionFirearms.ammoId, ammoInventory.id))
+  .where(isNotNull(sessionFirearms.ammoId));
+const rangeSpend = spendRows.reduce((s, r) => s + r.rounds * (r.cpr ?? 0), 0);
+
+// Maintenance due: firearms with a service interval set
+const firearmsWithInterval = await db.select().from(firearms).where(isNotNull(firearms.serviceIntervalRounds));
+const maintenanceDue: { firearm: typeof firearmsWithInterval[0], roundsSince: number, interval: number }[] = [];
+
+for (const f of firearmsWithInterval) {
+  const [roundRow] = await db
+    .select({ total: sum(sessionFirearms.roundsFired) })
+    .from(sessionFirearms)
+    .where(eq(sessionFirearms.firearmId, f.id));
+  const total = Number(roundRow?.total ?? 0);
+
+  const [lastCleaning] = await db
+    .select()
+    .from(maintenanceLogs)
+    .where(and(eq(maintenanceLogs.firearmId, f.id), eq(maintenanceLogs.type, 'cleaning')))
+    .orderBy(desc(maintenanceLogs.date))
+    .limit(1);
+
+  const roundsSince = total - (lastCleaning?.roundCount ?? 0);
+  if (roundsSince >= f.serviceIntervalRounds!) {
+    maintenanceDue.push({ firearm: f, roundsSince, interval: f.serviceIntervalRounds! });
+  }
+}
 ---
 
 <Layout title="Command Center" sub="Tactical inventory overview">
@@ -77,17 +109,48 @@ const lowAmmo        = await db.select().from(ammoInventory).where(sql`quantity 
         </div>
       </div>
 
+      {rangeSpend > 0 && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Range Spend</div>
+            <div class="stat-card-value" style="color:#f59e0b">${rangeSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div class="stat-card-sub">ammo all time</div>
+          </div>
+          <div class="stat-card-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75" />
+            </svg>
+          </div>
+        </div>
+      )}
+
     </div>
 
-    <!-- Maintenance due placeholder -->
+    <!-- Maintenance due -->
     <div>
       <div class="section-header">
-        <span style="color:#ef4444;font-size:0.75rem">●</span>
+        <span style={`color:${maintenanceDue.length > 0 ? '#ef4444' : 'var(--text-dim)'};font-size:0.75rem`}>●</span>
         <span class="section-title">Maintenance Due</span>
       </div>
-      <div class="card" style="padding:1.5rem;text-align:center;color:var(--text-dim);font-size:0.8125rem">
-        No firearms currently due for maintenance
-      </div>
+      {maintenanceDue.length === 0 ? (
+        <div class="card" style="padding:1.5rem;text-align:center;color:var(--text-dim);font-size:0.8125rem">
+          {firearmsWithInterval.length === 0
+            ? 'Set a service interval on a firearm to track maintenance.'
+            : 'All firearms are within service interval.'}
+        </div>
+      ) : (
+        <div class="card card-divide">
+          {maintenanceDue.map(({ firearm, roundsSince, interval }) => (
+            <a href={`/firearms/${firearm.id}`} class="list-row list-row-link" style="justify-content:space-between">
+              <div>
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{firearm.name}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">{roundsSince.toLocaleString()} rds since last cleaning · interval {interval.toLocaleString()} rds</div>
+              </div>
+              <span style="font-size:0.75rem;font-weight:700;color:#ef4444;white-space:nowrap">{(roundsSince - interval).toLocaleString()} overdue</span>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
 
     <!-- Low ammo -->

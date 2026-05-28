@@ -13,6 +13,7 @@ export const firearms = sqliteTable('firearms', {
   purchasePrice: real('purchase_price'),
   notes: text('notes'),
   photoPath: text('photo_path'),
+  serviceIntervalRounds: integer('service_interval_rounds'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 

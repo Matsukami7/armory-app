@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
 import { rangeSessions, sessionFirearms, firearms, ammoInventory, drills } from '../../db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { saveUpload } from '../../lib/uploads';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/sessions');
@@ -42,6 +43,14 @@ if (Astro.request.method === 'POST') {
   if (action === 'remove_drill') {
     await db.delete(drills).where(eq(drills.id, parseInt(form.get('drillId') as string)));
   }
+  if (action === 'upload_target') {
+    const file = form.get('photo') as File | null;
+    const drillId = parseInt(form.get('drillId') as string);
+    if (file && file.size > 0) {
+      const photoPath = await saveUpload(file, 'targets');
+      if (photoPath) await db.update(drills).set({ targetPhotoPath: photoPath }).where(eq(drills.id, drillId));
+    }
+  }
   return Astro.redirect(`/sessions/${id}`);
 }
 
@@ -56,6 +65,7 @@ const sessionDrills = await db.select().from(drills).where(eq(drills.sessionId, 
 const allFirearms   = await db.select().from(firearms);
 const allAmmo       = await db.select().from(ammoInventory);
 const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
+const sessionCost   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired * (r.a?.costPerRound ?? 0), 0);
 ---
 
 <Layout
@@ -77,6 +87,15 @@ const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
           <div class="stat-card-value" style="color:#f97316">{totalRounds.toLocaleString()}</div>
         </div>
       </div>
+      {sessionCost > 0 && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Session Cost</div>
+            <div class="stat-card-value" style="color:#22c55e">${sessionCost.toFixed(2)}</div>
+            <div class="stat-card-sub">ammo spend</div>
+          </div>
+        </div>
+      )}
       {session.weather && (
         <div class="stat-card">
           <div>
@@ -106,7 +125,12 @@ const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
             <div class="list-row" style="justify-content:space-between">
               <div>
                 <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{r.f?.name ?? 'Unknown'}</div>
-                {r.a && <div style="font-size:0.75rem;color:var(--text-muted)">{r.a.brand} {r.a.grain}gr {r.a.caliber}</div>}
+                {r.a && (
+                  <div style="font-size:0.75rem;color:var(--text-muted)">
+                    {r.a.brand} {r.a.grain}gr {r.a.caliber}
+                    {r.a.costPerRound && <span style="color:var(--text-dim)"> · ${(r.sf.roundsFired * r.a.costPerRound).toFixed(2)}</span>}
+                  </div>
+                )}
               </div>
               <div style="display:flex;align-items:center;gap:0.75rem">
                 <span style="font-size:0.875rem;font-weight:700;color:#f97316">{r.sf.roundsFired} rds</span>
@@ -153,10 +177,9 @@ const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
           const selected = firearmSel.options[firearmSel.selectedIndex];
           const caliber = selected?.dataset?.caliber ?? '';
           Array.from(ammoSel.options).forEach(opt => {
-            if (!opt.value) return; // keep the "None" option
+            if (!opt.value) return;
             opt.hidden = caliber ? opt.dataset.caliber !== caliber : false;
           });
-          // Reset to "None" if current selection no longer matches
           const cur = ammoSel.options[ammoSel.selectedIndex];
           if (cur?.hidden) ammoSel.value = '';
         }
@@ -168,24 +191,42 @@ const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
       <div class="section-header">
         <span style="color:var(--accent);font-size:0.75rem">◎</span>
         <span class="section-title">Drills</span>
+        {sessionDrills.length > 0 && (
+          <a href="/drills" style="margin-left:auto;font-size:0.7rem;color:var(--accent);text-decoration:none;opacity:0.8">View History →</a>
+        )}
       </div>
       {sessionDrills.length > 0 && (
         <div class="card card-divide" style="margin-bottom:0.75rem">
           {sessionDrills.map(d => (
             <div class="list-row" style="justify-content:space-between;align-items:flex-start">
               <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:0.75rem">
+                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
                   <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{d.name}</span>
                   {d.score && <span class="pill pill-accent">{d.score}</span>}
                 </div>
                 {d.distance && <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">{d.distance}</div>}
                 {d.notes && <div style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.25rem">{d.notes}</div>}
+                {d.targetPhotoPath && (
+                  <a href={d.targetPhotoPath} target="_blank" style="display:inline-block;margin-top:0.5rem">
+                    <img src={d.targetPhotoPath} alt="Target" style="max-width:7rem;max-height:5rem;object-fit:cover;border-radius:0.25rem;border:1px solid var(--border)" />
+                  </a>
+                )}
               </div>
-              <form method="POST">
-                <input type="hidden" name="_action" value="remove_drill" />
-                <input type="hidden" name="drillId" value={d.id} />
-                <button type="submit" class="btn-delete">✕</button>
-              </form>
+              <div style="display:flex;flex-direction:column;gap:0.375rem;align-items:flex-end;margin-left:0.75rem">
+                <form method="POST" enctype="multipart/form-data">
+                  <input type="hidden" name="_action" value="upload_target" />
+                  <input type="hidden" name="drillId" value={d.id} />
+                  <label class="btn btn-secondary" style="cursor:pointer;font-size:0.7rem;padding:0.25rem 0.5rem">
+                    {d.targetPhotoPath ? '📷' : '+ Target'}
+                    <input type="file" name="photo" accept="image/*" style="display:none" onchange="this.form.submit()" />
+                  </label>
+                </form>
+                <form method="POST">
+                  <input type="hidden" name="_action" value="remove_drill" />
+                  <input type="hidden" name="drillId" value={d.id} />
+                  <button type="submit" class="btn-delete">✕</button>
+                </form>
+              </div>
             </div>
           ))}
         </div>

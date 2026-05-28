@@ -21,8 +21,9 @@ if (Astro.request.method === 'POST') {
     generation:    form.get('generation') as string || null,
     type:          form.get('type') as string,
     purchaseDate:  form.get('purchaseDate') as string || null,
-    purchasePrice: form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
-    notes:         form.get('notes') as string || null,
+    purchasePrice:         form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
+    notes:                 form.get('notes') as string || null,
+    serviceIntervalRounds: form.get('serviceIntervalRounds') ? parseInt(form.get('serviceIntervalRounds') as string) : null,
   }).where(eq(firearms.id, id));
   return Astro.redirect(`/firearms/${id}`);
 }
@@ -61,6 +62,8 @@ if (Astro.request.method === 'POST') {
     </div>
 
     <div><label>Notes</label><textarea name="notes" rows="4">{firearm.notes ?? ''}</textarea></div>
+
+    <div><label>Service Interval (rounds)</label><input name="serviceIntervalRounds" type="number" min="1" value={firearm.serviceIntervalRounds ?? ''} placeholder="e.g. 500 — dashboard alerts when due" /></div>
 
     <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
   </form>

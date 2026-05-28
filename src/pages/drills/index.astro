@@ -1,0 +1,190 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { drills, rangeSessions, firearms } from '../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+
+const allDrills = await db
+  .select({ d: drills, sessionDate: rangeSessions.date, firearmName: firearms.name })
+  .from(drills)
+  .leftJoin(rangeSessions, eq(drills.sessionId, rangeSessions.id))
+  .leftJoin(firearms, eq(drills.firearmId, firearms.id))
+  .orderBy(desc(rangeSessions.date));
+
+// Group by drill name
+const grouped = new Map<string, typeof allDrills>();
+for (const row of allDrills) {
+  const name = row.d.name;
+  if (!grouped.has(name)) grouped.set(name, []);
+  grouped.get(name)!.push(row);
+}
+
+// Sort groups: most recently used first
+const groups = [...grouped.entries()].sort((a, b) =>
+  (b[1][0].sessionDate ?? '').localeCompare(a[1][0].sessionDate ?? '')
+);
+
+// Parse a score string to a number for charting
+function parseScore(s: string | null): number | null {
+  if (!s) return null;
+  const m = s.match(/(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// Build chart data per group — only groups with ≥2 numeric scores get a chart
+const chartData = groups.map(([name, rows]) => {
+  const points = [...rows].reverse().flatMap(r => {
+    const n = parseScore(r.d.score);
+    return n !== null && r.sessionDate ? [{ date: r.sessionDate, value: n, label: r.d.score! }] : [];
+  });
+  return { name, points };
+}).filter(g => g.points.length >= 2);
+---
+
+<Layout title="Drill History" sub="Progress over time">
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:52rem">
+
+    {groups.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">🎯</div>
+        <div class="empty-state-text">No drills logged yet. Add drills from a session to track progress.</div>
+        <a href="/sessions" class="btn btn-primary">View Sessions</a>
+      </div>
+    )}
+
+    {/* Charts section */}
+    {chartData.length > 0 && (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">▲</span>
+          <span class="section-title">Score Trends</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem">
+          {chartData.map(g => (
+            <div class="card" style="padding:1.25rem">
+              <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.75rem">{g.name}</div>
+              <canvas
+                data-chart={JSON.stringify({ labels: g.points.map(p => p.date), values: g.points.map(p => p.value), tooltips: g.points.map(p => p.label) })}
+                style="width:100%;height:120px"
+                height="120"
+              ></canvas>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* Full history by drill name */}
+    {groups.map(([name, rows]) => (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◎</span>
+          <span class="section-title">{name}</span>
+          <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">{rows.length} {rows.length === 1 ? 'session' : 'sessions'}</span>
+        </div>
+        <div class="card card-divide">
+          {rows.map(r => (
+            <div class="list-row" style="justify-content:space-between;align-items:flex-start">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                  <span style="font-size:0.8125rem;color:var(--text-muted)">{r.sessionDate}</span>
+                  {r.d.score && <span class="pill pill-accent">{r.d.score}</span>}
+                  {r.d.distance && <span class="pill pill-default">{r.d.distance}</span>}
+                  {r.firearmName && <span style="font-size:0.7rem;color:var(--text-dim)">{r.firearmName}</span>}
+                </div>
+                {r.d.notes && <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem">{r.d.notes}</div>}
+                {r.d.targetPhotoPath && (
+                  <a href={r.d.targetPhotoPath} target="_blank" style="display:inline-block;margin-top:0.5rem">
+                    <img src={r.d.targetPhotoPath} alt="Target" style="max-width:6rem;max-height:4.5rem;object-fit:cover;border-radius:0.25rem;border:1px solid var(--border)" />
+                  </a>
+                )}
+              </div>
+              <a href={`/sessions/${r.d.sessionId}`} style="font-size:0.7rem;color:var(--accent);text-decoration:none;white-space:nowrap;margin-left:0.75rem">View →</a>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+
+  </div>
+</Layout>
+
+<script>
+  // Render charts after page load using CSS variable colors
+  document.addEventListener('DOMContentLoaded', () => {
+    const style = getComputedStyle(document.documentElement);
+    const accent = style.getPropertyValue('--accent').trim() || '#06b6d4';
+    const border = style.getPropertyValue('--border').trim() || '#1e2433';
+
+    document.querySelectorAll<HTMLCanvasElement>('canvas[data-chart]').forEach(canvas => {
+      const { labels, values, tooltips } = JSON.parse(canvas.dataset.chart!);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const w = canvas.offsetWidth || 300;
+      const h = canvas.offsetHeight || 120;
+      canvas.width = w * devicePixelRatio;
+      canvas.height = h * devicePixelRatio;
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+
+      const pad = { top: 10, right: 10, bottom: 28, left: 36 };
+      const chartW = w - pad.left - pad.right;
+      const chartH = h - pad.top - pad.bottom;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+
+      const xPos = (i: number) => pad.left + (i / (values.length - 1)) * chartW;
+      const yPos = (v: number) => pad.top + chartH - ((v - min) / range) * chartH;
+
+      // Grid lines
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      [0, 0.5, 1].forEach(t => {
+        const y = pad.top + t * chartH;
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke();
+        ctx.fillStyle = '#6b7280';
+        ctx.font = `${10 * devicePixelRatio / devicePixelRatio}px ui-monospace,monospace`;
+        ctx.textAlign = 'right';
+        ctx.fillText((max - t * range).toFixed(1), pad.left - 4, y + 3.5);
+      });
+
+      // Area fill
+      ctx.beginPath();
+      ctx.moveTo(xPos(0), yPos(values[0]));
+      values.forEach((v: number, i: number) => { if (i > 0) ctx.lineTo(xPos(i), yPos(v)); });
+      ctx.lineTo(xPos(values.length - 1), pad.top + chartH);
+      ctx.lineTo(xPos(0), pad.top + chartH);
+      ctx.closePath();
+      ctx.fillStyle = accent + '22';
+      ctx.fill();
+
+      // Line
+      ctx.beginPath();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      values.forEach((v: number, i: number) => i === 0 ? ctx.moveTo(xPos(i), yPos(v)) : ctx.lineTo(xPos(i), yPos(v)));
+      ctx.stroke();
+
+      // Dots + x-axis labels
+      values.forEach((v: number, i: number) => {
+        ctx.beginPath();
+        ctx.arc(xPos(i), yPos(v), 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = accent;
+        ctx.fill();
+        ctx.strokeStyle = '#0b0e14';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        if (i === 0 || i === values.length - 1 || values.length <= 6) {
+          ctx.fillStyle = '#6b7280';
+          ctx.font = `9px ui-sans-serif,sans-serif`;
+          ctx.textAlign = 'center';
+          const label = labels[i].slice(5); // MM-DD
+          ctx.fillText(label, xPos(i), h - 6);
+        }
+      });
+    });
+  });
+</script>

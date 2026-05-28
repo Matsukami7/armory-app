@@ -23,6 +23,7 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 ### Firearm Log
 - Per-firearm log with five entry types: **Note**, **Cleaning**, **Repair**, **Inspection**, **Modification**
 - Record round count at time of service for maintenance entries
+- Set a service interval (rounds) per firearm — dashboard alerts when cleaning is overdue
 - Entries displayed newest-first with type icons; individual entries deletable
 
 ### Range Sessions
@@ -31,7 +32,9 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 - Link one or more firearms to a session with rounds fired
 - Ammo dropdown automatically filters to matching caliber for the selected firearm
 - Link ammo inventory to auto-deduct rounds on save
+- Session cost calculated automatically from rounds fired × cost per round
 - Log drills per session: name, distance, score, notes, and which firearm was used
+- Attach a target photo to any drill entry for visual progress tracking
 - Edit session details or remove individual firearm/drill entries after the fact
 
 ### Ammo Inventory
@@ -41,10 +44,17 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 - Dashboard warns when any ammo type drops below 100 rounds
 
 ### Dashboard
-- At-a-glance stats: total firearms, sessions, and lifetime rounds fired
+- At-a-glance stats: total firearms, sessions, lifetime rounds fired, total investment, and all-time range spend (ammo cost)
+- Maintenance due alerts — set a service interval (rounds) per firearm and the dashboard flags overdue ones
 - Quick-add buttons for new session and new firearm
 - Recent sessions list
 - Low ammo warnings
+
+### Drill History
+- Dedicated Drills page showing all logged drills grouped by name
+- Score trend charts for drills with numeric results (e.g. FAST Drill times, Dot Torture scores)
+- Full session history per drill with date, score, distance, firearm, and target photo
+- Links back to individual sessions
 
 ---
 

@@ -97,9 +97,8 @@ sqlite.exec(`
 
 // Column migrations for existing databases — safe to run on every startup
 const firearmColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('firearms')").all() as { name: string }[]).map(r => r.name);
-if (!firearmColumns.includes('generation')) {
-  sqlite.exec("ALTER TABLE firearms ADD COLUMN generation TEXT");
-}
+if (!firearmColumns.includes('generation'))              sqlite.exec("ALTER TABLE firearms ADD COLUMN generation TEXT");
+if (!firearmColumns.includes('service_interval_rounds')) sqlite.exec("ALTER TABLE firearms ADD COLUMN service_interval_rounds INTEGER");
 
 const accColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('accessories')").all() as { name: string }[]).map(r => r.name);
 if (!accColumns.includes('lumens'))       sqlite.exec("ALTER TABLE accessories ADD COLUMN lumens INTEGER");
