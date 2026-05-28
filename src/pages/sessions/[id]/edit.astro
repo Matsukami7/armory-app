@@ -2,7 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import { db } from '../../../db';
 import { rangeSessions } from '../../../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/sessions');
@@ -10,7 +10,8 @@ if (isNaN(id)) return Astro.redirect('/sessions');
 const [session] = await db.select().from(rangeSessions).where(eq(rangeSessions.id, id));
 if (!session) return Astro.redirect('/sessions');
 
-const pastLocations = await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`) as unknown as { location: string }[];
+const locationRows = await db.selectDistinct({ location: rangeSessions.location }).from(rangeSessions).where(isNotNull(rangeSessions.location)).orderBy(rangeSessions.location);
+const pastLocations = locationRows.map(r => r.location as string);
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
@@ -34,7 +35,7 @@ if (Astro.request.method === 'POST') {
     </div>
 
     <datalist id="locations">
-      {pastLocations.map(r => <option value={r.location} />)}
+      {pastLocations.map(loc => <option value={loc} />)}
     </datalist>
     <div><label>Location / Range</label><input name="location" type="text" list="locations" value={session.location ?? ''} /></div>
 
