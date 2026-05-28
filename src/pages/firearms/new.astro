@@ -11,6 +11,7 @@ if (Astro.request.method === 'POST') {
     model: form.get('model') as string,
     caliber: form.get('caliber') as string,
     serial: form.get('serial') as string || null,
+    generation: form.get('generation') as string || null,
     type: form.get('type') as string,
     purchaseDate: form.get('purchaseDate') as string || null,
     purchasePrice: form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
@@ -56,9 +57,15 @@ if (Astro.request.method === 'POST') {
       </div>
     </div>
 
-    <div>
-      <label for="serial">Serial Number</label>
-      <input id="serial" name="serial" type="text" placeholder="Optional" />
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="serial">Serial Number</label>
+        <input id="serial" name="serial" type="text" placeholder="Optional" />
+      </div>
+      <div>
+        <label for="generation">Generation</label>
+        <input id="generation" name="generation" type="text" placeholder="e.g. Gen 5" />
+      </div>
     </div>
 
     <div class="grid grid-cols-2 gap-3">

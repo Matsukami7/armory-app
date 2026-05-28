@@ -20,6 +20,7 @@ sqlite.exec(`
     model TEXT NOT NULL,
     caliber TEXT NOT NULL,
     serial TEXT,
+    generation TEXT,
     type TEXT NOT NULL,
     purchase_date TEXT,
     purchase_price REAL,
@@ -93,6 +94,12 @@ sqlite.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// Column migrations for existing databases — safe to run on every startup
+const firearmColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('firearms')").all() as { name: string }[]).map(r => r.name);
+if (!firearmColumns.includes('generation')) {
+  sqlite.exec("ALTER TABLE firearms ADD COLUMN generation TEXT");
+}
 
 export const db = drizzle(sqlite, { schema });
 export type DB = typeof db;
