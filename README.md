@@ -18,6 +18,7 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 ### Accessories
 - Attach accessories (optics, lights, suppressors, grips, stocks, triggers) to any firearm
 - Track make, model, and purchase price per accessory
+- Lights include dedicated fields: output in lumens, power source (rechargeable or battery), and battery type (CR123A, 18650, AA, etc.)
 
 ### Firearm Log
 - Per-firearm log with five entry types: **Note**, **Cleaning**, **Repair**, **Inspection**, **Modification**
@@ -26,7 +27,9 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 
 ### Range Sessions
 - Log sessions with date, location, duration, weather, and general notes
+- Location field autocompletes from your previously used ranges
 - Link one or more firearms to a session with rounds fired
+- Ammo dropdown automatically filters to matching caliber for the selected firearm
 - Link ammo inventory to auto-deduct rounds on save
 - Log drills per session: name, distance, score, notes, and which firearm was used
 - Edit session details or remove individual firearm/drill entries after the fact

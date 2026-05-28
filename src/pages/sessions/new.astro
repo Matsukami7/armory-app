@@ -2,6 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
 import { rangeSessions } from '../../db/schema';
+import { sql } from 'drizzle-orm';
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
@@ -16,6 +17,7 @@ if (Astro.request.method === 'POST') {
 }
 
 const today = new Date().toISOString().split('T')[0];
+const pastLocations = (await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`)).rows as { location: string }[];
 ---
 
 <Layout title="Log Session" backHref="/sessions">
@@ -26,7 +28,10 @@ const today = new Date().toISOString().split('T')[0];
       <div><label>Duration (min)</label><input name="durationMinutes" type="number" min="1" placeholder="60" /></div>
     </div>
 
-    <div><label>Location / Range</label><input name="location" type="text" placeholder="e.g. Oakwood Indoor Range" /></div>
+    <datalist id="locations">
+      {pastLocations.map(r => <option value={r.location} />)}
+    </datalist>
+    <div><label>Location / Range</label><input name="location" type="text" list="locations" placeholder="e.g. Oakwood Indoor Range" /></div>
 
     <div><label>Weather / Conditions</label><input name="weather" type="text" placeholder="e.g. Sunny, 75°F, light wind" /></div>
 

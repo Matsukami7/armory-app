@@ -2,13 +2,15 @@
 import Layout from '../../../layouts/Layout.astro';
 import { db } from '../../../db';
 import { rangeSessions } from '../../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/sessions');
 
 const [session] = await db.select().from(rangeSessions).where(eq(rangeSessions.id, id));
 if (!session) return Astro.redirect('/sessions');
+
+const pastLocations = (await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`)).rows as { location: string }[];
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
@@ -31,7 +33,10 @@ if (Astro.request.method === 'POST') {
       <div><label>Duration (min)</label><input name="durationMinutes" type="number" min="1" value={session.durationMinutes ?? ''} /></div>
     </div>
 
-    <div><label>Location / Range</label><input name="location" type="text" value={session.location ?? ''} /></div>
+    <datalist id="locations">
+      {pastLocations.map(r => <option value={r.location} />)}
+    </datalist>
+    <div><label>Location / Range</label><input name="location" type="text" list="locations" value={session.location ?? ''} /></div>
 
     <div><label>Weather / Conditions</label><input name="weather" type="text" value={session.weather ?? ''} /></div>
 

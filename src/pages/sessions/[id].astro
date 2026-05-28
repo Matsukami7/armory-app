@@ -126,24 +126,41 @@ const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
           <input type="hidden" name="_action" value="add_firearm" />
           <div>
             <label>Firearm *</label>
-            <select name="firearmId" required>
+            <select name="firearmId" required id="sf-firearm" onchange="filterAmmo()">
               <option value="">Select...</option>
-              {allFirearms.map(f => <option value={f.id}>{f.name} ({f.caliber})</option>)}
+              {allFirearms.map(f => <option value={f.id} data-caliber={f.caliber}>{f.name} ({f.caliber})</option>)}
             </select>
           </div>
           <div class="form-row form-row-2">
             <div><label>Rounds Fired</label><input name="roundsFired" type="number" min="0" placeholder="0" /></div>
             <div>
               <label>Ammo Used</label>
-              <select name="ammoId">
+              <select name="ammoId" id="sf-ammo">
                 <option value="">None</option>
-                {allAmmo.map(a => <option value={a.id}>{a.brand} {a.grain}gr {a.caliber} ({a.quantity} left)</option>)}
+                {allAmmo.map(a => <option value={a.id} data-caliber={a.caliber}>{a.brand} {a.grain}gr {a.caliber} ({a.quantity} left)</option>)}
               </select>
             </div>
           </div>
           <button type="submit" class="btn btn-primary">Add</button>
         </form>
       </details>
+
+      <script>
+        function filterAmmo() {
+          const firearmSel = document.getElementById('sf-firearm');
+          const ammoSel = document.getElementById('sf-ammo');
+          if (!firearmSel || !ammoSel) return;
+          const selected = firearmSel.options[firearmSel.selectedIndex];
+          const caliber = selected?.dataset?.caliber ?? '';
+          Array.from(ammoSel.options).forEach(opt => {
+            if (!opt.value) return; // keep the "None" option
+            opt.hidden = caliber ? opt.dataset.caliber !== caliber : false;
+          });
+          // Reset to "None" if current selection no longer matches
+          const cur = ammoSel.options[ammoSel.selectedIndex];
+          if (cur?.hidden) ammoSel.value = '';
+        }
+      </script>
     </div>
 
     <!-- Drills -->
