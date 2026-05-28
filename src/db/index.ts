@@ -37,6 +37,17 @@ sqlite.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS gear (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    unit TEXT NOT NULL DEFAULT 'pcs',
+    low_stock_threshold INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS ammo_purchases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ammo_id INTEGER NOT NULL REFERENCES ammo_inventory(id) ON DELETE CASCADE,
@@ -119,6 +130,10 @@ const firearmColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('fire
 if (!firearmColumns.includes('generation'))              sqlite.exec("ALTER TABLE firearms ADD COLUMN generation TEXT");
 if (!firearmColumns.includes('service_interval_rounds')) sqlite.exec("ALTER TABLE firearms ADD COLUMN service_interval_rounds INTEGER");
 if (!firearmColumns.includes('current_value'))           sqlite.exec("ALTER TABLE firearms ADD COLUMN current_value REAL");
+if (!firearmColumns.includes('tags'))                    sqlite.exec("ALTER TABLE firearms ADD COLUMN tags TEXT");
+
+const sessionColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('range_sessions')").all() as { name: string }[]).map(r => r.name);
+if (!sessionColumns.includes('tags'))                    sqlite.exec("ALTER TABLE range_sessions ADD COLUMN tags TEXT");
 
 const accColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('accessories')").all() as { name: string }[]).map(r => r.name);
 if (!accColumns.includes('lumens'))       sqlite.exec("ALTER TABLE accessories ADD COLUMN lumens INTEGER");

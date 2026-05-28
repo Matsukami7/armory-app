@@ -15,6 +15,7 @@ export const firearms = sqliteTable('firearms', {
   notes: text('notes'),
   photoPath: text('photo_path'),
   serviceIntervalRounds: integer('service_interval_rounds'),
+  tags: text('tags'), // comma-separated tag list
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
@@ -81,6 +82,18 @@ export const rangeSessions = sqliteTable('range_sessions', {
   location: text('location'),
   durationMinutes: integer('duration_minutes'),
   weather: text('weather'),
+  notes: text('notes'),
+  tags: text('tags'), // comma-separated tag list
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const gear = sqliteTable('gear', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  category: text('category').notNull(), // cleaning, targets, batteries, tools, safety, other
+  quantity: integer('quantity').notNull().default(0),
+  unit: text('unit').notNull().default('pcs'),
+  lowStockThreshold: integer('low_stock_threshold').notNull().default(0),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });

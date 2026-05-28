@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { rangeSessions, sessionFirearms, firearms, ammoInventory, drills } from '../../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { saveUpload } from '../../lib/uploads';
+import { parseTags, serializeTags, tagColor } from '../../lib/tags';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/sessions');
@@ -42,6 +43,20 @@ if (Astro.request.method === 'POST') {
   }
   if (action === 'remove_drill') {
     await db.delete(drills).where(eq(drills.id, parseInt(form.get('drillId') as string)));
+  }
+  if (action === 'add_tag') {
+    const tag = (form.get('tag') as string).toLowerCase().replace(/[^a-z0-9-]/g, '').trim();
+    if (tag) {
+      const existing = parseTags(session.tags);
+      if (!existing.includes(tag)) {
+        await db.update(rangeSessions).set({ tags: serializeTags([...existing, tag]) }).where(eq(rangeSessions.id, id));
+      }
+    }
+  }
+  if (action === 'remove_tag') {
+    const tag = form.get('tag') as string;
+    const updated = parseTags(session.tags).filter(t => t !== tag);
+    await db.update(rangeSessions).set({ tags: serializeTags(updated) }).where(eq(rangeSessions.id, id));
   }
   if (action === 'upload_target') {
     const file = form.get('photo') as File | null;
@@ -112,6 +127,27 @@ const sessionCost   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired * (r.a?.
         <p style="font-size:0.875rem;color:var(--text-muted);line-height:1.6">{session.notes}</p>
       </div>
     )}
+
+    <!-- Tags -->
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+      {parseTags(session.tags).map(t => {
+        const color = tagColor(t);
+        return (
+          <span style={`display:inline-flex;align-items:center;gap:0.25rem;font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:9999px;border:1px solid ${color}44;color:${color}`}>
+            {t}
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="_action" value="remove_tag" />
+              <input type="hidden" name="tag" value={t} />
+              <button type="submit" style="background:none;border:none;cursor:pointer;color:inherit;padding:0;font-size:0.7rem;line-height:1">✕</button>
+            </form>
+          </span>
+        );
+      })}
+      <form method="POST" style="display:inline-flex;align-items:center;gap:0.25rem">
+        <input type="hidden" name="_action" value="add_tag" />
+        <input name="tag" type="text" placeholder="+ tag" style="background:transparent;border:1px solid var(--border);border-radius:9999px;padding:0.1rem 0.5rem;font-size:0.7rem;color:var(--text-muted);width:5rem;outline:none" />
+      </form>
+    </div>
 
     <!-- Firearms used -->
     <div>

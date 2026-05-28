@@ -3,8 +3,12 @@ import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
 import { rangeSessions, sessionFirearms } from '../../db/schema';
 import { sql, sum } from 'drizzle-orm';
+import { parseTags, tagColor } from '../../lib/tags';
 
-const sessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`);
+const tagFilter = Astro.url.searchParams.get('tag') ?? '';
+const allSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`);
+const sessions = tagFilter ? allSessions.filter(s => parseTags(s.tags).includes(tagFilter)) : allSessions;
+const allTags = [...new Set(allSessions.flatMap(s => parseTags(s.tags)))].sort();
 const roundsBySession = await db
   .select({ sessionId: sessionFirearms.sessionId, total: sum(sessionFirearms.roundsFired) })
   .from(sessionFirearms)
@@ -17,6 +21,24 @@ const roundsMap = new Map(roundsBySession.map(r => [r.sessionId, Number(r.total)
     <a href="/range-card" class="btn btn-secondary">🖨 Range Card</a>
     <a href="/sessions/new" class="btn btn-primary">+ Log Session</a>
   </slot>
+
+  {allTags.length > 0 && (
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin-bottom:0.5rem">
+      <span style="font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim)">Tags:</span>
+      {tagFilter && (
+        <a href="/sessions" style="font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:9999px;background:rgba(255,255,255,0.08);color:var(--text-muted);border:1px solid rgba(255,255,255,0.15);text-decoration:none">✕ clear</a>
+      )}
+      {allTags.map(t => {
+        const color = tagColor(t);
+        const active = tagFilter === t;
+        return (
+          <a href={`/sessions?tag=${t}`} style={`font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:9999px;text-decoration:none;border:1px solid ${color}44;color:${color};background:${active ? color + '22' : 'transparent'};font-weight:${active ? '700' : '400'}`}>
+            {t}
+          </a>
+        );
+      })}
+    </div>
+  )}
 
   {sessions.length === 0 ? (
     <div class="empty-state">
@@ -33,6 +55,14 @@ const roundsMap = new Map(roundsBySession.map(r => [r.sessionId, Number(r.total)
             <div style="font-size:0.75rem;color:var(--text-muted)">
               {s.location ?? 'No location'}{s.durationMinutes ? ` · ${s.durationMinutes}min` : ''}
             </div>
+            {parseTags(s.tags).length > 0 && (
+              <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.25rem">
+                {parseTags(s.tags).map(t => {
+                  const color = tagColor(t);
+                  return <span style={`font-size:0.65rem;padding:0.1rem 0.35rem;border-radius:9999px;border:1px solid ${color}44;color:${color}`}>{t}</span>;
+                })}
+              </div>
+            )}
           </div>
           <div style="display:flex;align-items:center;gap:1rem">
             {roundsMap.has(s.id) && (

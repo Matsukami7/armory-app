@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { firearms, firearmPhotos, accessories, maintenanceLogs, sessionFirearms } from '../../db/schema';
 import { eq, sum, desc } from 'drizzle-orm';
 import { saveUpload } from '../../lib/uploads';
+import { parseTags, serializeTags, tagColor } from '../../lib/tags';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/firearms');
@@ -80,6 +81,24 @@ if (Astro.request.method === 'POST') {
     await db.delete(accessories).where(eq(accessories.id, parseInt(form.get('accId') as string)));
     return Astro.redirect(`/firearms/${id}`);
   }
+  if (action === 'add_tag') {
+    const tag = (form.get('tag') as string ?? '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (tag) {
+      const [cur] = await db.select({ tags: firearms.tags }).from(firearms).where(eq(firearms.id, id));
+      const existing = parseTags(cur?.tags ?? null);
+      if (!existing.includes(tag)) {
+        await db.update(firearms).set({ tags: serializeTags([...existing, tag]) }).where(eq(firearms.id, id));
+      }
+    }
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'remove_tag') {
+    const tag = form.get('tag') as string;
+    const [cur] = await db.select({ tags: firearms.tags }).from(firearms).where(eq(firearms.id, id));
+    const updated = parseTags(cur?.tags ?? null).filter(t => t !== tag);
+    await db.update(firearms).set({ tags: serializeTags(updated) }).where(eq(firearms.id, id));
+    return Astro.redirect(`/firearms/${id}`);
+  }
 }
 
 const [gun]      = await db.select().from(firearms).where(eq(firearms.id, id));
@@ -89,6 +108,7 @@ const logs       = await db.select().from(maintenanceLogs).where(eq(maintenanceL
 const [rRow]     = await db.select({ total: sum(sessionFirearms.roundsFired) }).from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
 const totalRounds = Number(rRow?.total ?? 0);
 
+const gunTags = parseTags(gun.tags);
 const typeLabel: Record<string, string> = { pistol:'Pistol', rifle:'Rifle', shotgun:'Shotgun', revolver:'Revolver', other:'Other' };
 const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', inspection:'🔍', modification:'⚙️', note:'📝' };
 ---
@@ -161,6 +181,24 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
           <span class="pill pill-accent">{typeLabel[gun.type] ?? gun.type}</span>
           <span class="pill pill-default">{gun.caliber}</span>
           {gun.generation && <span class="pill pill-default">{gun.generation}</span>}
+        </div>
+
+        <!-- Tags -->
+        <div style="display:flex;flex-wrap:wrap;gap:0.375rem;align-items:center">
+          {gunTags.map(tag => (
+            <span style={`display:inline-flex;align-items:center;gap:0.25rem;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;background:${tagColor(tag)}22;color:${tagColor(tag)};border:1px solid ${tagColor(tag)}44;padding:0.2rem 0.45rem;border-radius:9999px`}>
+              #{tag}
+              <form method="POST" style="display:contents">
+                <input type="hidden" name="_action" value="remove_tag" />
+                <input type="hidden" name="tag" value={tag} />
+                <button type="submit" style="background:none;border:none;cursor:pointer;color:inherit;padding:0;line-height:1;font-size:0.7rem;opacity:0.7">✕</button>
+              </form>
+            </span>
+          ))}
+          <form method="POST" style="display:flex;gap:0.25rem;align-items:center">
+            <input type="hidden" name="_action" value="add_tag" />
+            <input name="tag" type="text" placeholder="+ tag" style="font-size:0.65rem;width:4.5rem;padding:0.2rem 0.4rem;border-radius:9999px;border:1px solid var(--border);background:var(--bg-hover);color:var(--text)" />
+          </form>
         </div>
       </div>
 

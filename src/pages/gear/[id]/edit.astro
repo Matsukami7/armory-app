@@ -1,0 +1,66 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../db';
+import { gear } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
+
+const id = parseInt(Astro.params.id!);
+if (isNaN(id)) return Astro.redirect('/gear');
+
+const [item] = await db.select().from(gear).where(eq(gear.id, id));
+if (!item) return Astro.redirect('/gear');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'delete') {
+    await db.delete(gear).where(eq(gear.id, id));
+    return Astro.redirect('/gear');
+  }
+
+  await db.update(gear).set({
+    name:              form.get('name') as string,
+    category:          form.get('category') as string,
+    quantity:          parseInt(form.get('quantity') as string) || 0,
+    unit:              form.get('unit') as string || 'pcs',
+    lowStockThreshold: parseInt(form.get('lowStockThreshold') as string) || 0,
+    notes:             form.get('notes') as string || null,
+  }).where(eq(gear.id, id));
+  return Astro.redirect('/gear');
+}
+
+const cats = ['cleaning', 'targets', 'batteries', 'tools', 'safety', 'other'];
+const catLabel: Record<string, string> = {
+  cleaning: 'Cleaning', targets: 'Targets', batteries: 'Batteries',
+  tools: 'Tools', safety: 'Safety', other: 'Other',
+};
+---
+
+<Layout title={`Edit — ${item.name}`} backHref="/gear">
+  <div class="form-section" style="max-width:36rem">
+    <form method="POST" class="form-section">
+      <div class="form-row form-row-2">
+        <div><label>Name *</label><input name="name" type="text" required value={item.name} /></div>
+        <div>
+          <label>Category *</label>
+          <select name="category">
+            {cats.map(c => <option value={c} selected={item.category === c}>{catLabel[c]}</option>)}
+          </select>
+        </div>
+      </div>
+      <div class="form-row form-row-2">
+        <div><label>Quantity</label><input name="quantity" type="number" min="0" value={item.quantity} /></div>
+        <div><label>Unit</label><input name="unit" type="text" value={item.unit} /></div>
+      </div>
+      <div><label>Low Stock Alert Threshold</label><input name="lowStockThreshold" type="number" min="0" value={item.lowStockThreshold} /></div>
+      <div><label>Notes</label><input name="notes" type="text" value={item.notes ?? ''} /></div>
+      <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
+    </form>
+
+    <form method="POST" onsubmit="return confirm('Delete this item?')">
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="btn btn-danger btn-full">Delete Item</button>
+    </form>
+  </div>
+</Layout>

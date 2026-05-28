@@ -1,0 +1,161 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { gear } from '../../db/schema';
+import { eq, sql } from 'drizzle-orm';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'add') {
+    await db.insert(gear).values({
+      name:              form.get('name') as string,
+      category:          form.get('category') as string,
+      quantity:          parseInt(form.get('quantity') as string) || 0,
+      unit:              form.get('unit') as string || 'pcs',
+      lowStockThreshold: parseInt(form.get('lowStockThreshold') as string) || 0,
+      notes:             form.get('notes') as string || null,
+    });
+  }
+
+  if (action === 'adjust') {
+    const id    = parseInt(form.get('id') as string);
+    const delta = parseInt(form.get('delta') as string);
+    await db.run(sql`UPDATE gear SET quantity = MAX(0, quantity + ${delta}) WHERE id = ${id}`);
+  }
+
+  return Astro.redirect('/gear');
+}
+
+const catFilter = Astro.url.searchParams.get('cat') ?? 'all';
+const all = await db.select().from(gear).orderBy(sql`category, name`);
+const filtered = catFilter === 'all' ? all : all.filter(g => g.category === catFilter);
+
+const cats = ['cleaning', 'targets', 'batteries', 'tools', 'safety', 'other'];
+const catLabel: Record<string, string> = {
+  cleaning: 'Cleaning', targets: 'Targets', batteries: 'Batteries',
+  tools: 'Tools', safety: 'Safety', other: 'Other',
+};
+const catIcon: Record<string, string> = {
+  cleaning: '🧹', targets: '🎯', batteries: '🔋', tools: '🔧', safety: '🥽', other: '📦',
+};
+const counts: Record<string, number> = { all: all.length };
+for (const g of all) counts[g.category] = (counts[g.category] ?? 0) + 1;
+const lowStock = all.filter(g => g.lowStockThreshold > 0 && g.quantity <= g.lowStockThreshold);
+---
+
+<Layout title="Gear" sub="Consumables & supplies">
+  <slot name="actions" slot="actions">
+    <a href="#add-gear" class="btn btn-primary" onclick="document.getElementById('add-gear').open=true">+ Add Item</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.5rem">
+
+    {/* Low stock banner */}
+    {lowStock.length > 0 && (
+      <div class="card" style="padding:1rem;border-color:#f97316">
+        <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#f97316;margin-bottom:0.5rem">▲ Low Stock</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+          {lowStock.map(g => (
+            <span style="font-size:0.75rem;background:rgba(249,115,22,0.1);color:#f97316;border:1px solid rgba(249,115,22,0.3);padding:0.2rem 0.5rem;border-radius:9999px">
+              {g.name} — {g.quantity} {g.unit}
+            </span>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* Category filter tabs */}
+    {all.length > 0 && (
+      <div class="filter-tabs">
+        <a href="/gear" class={`filter-tab ${catFilter === 'all' ? 'active' : ''}`}>
+          All <span style="opacity:0.6;margin-left:0.25rem">{counts.all}</span>
+        </a>
+        {cats.filter(c => counts[c]).map(c => (
+          <a href={`/gear?cat=${c}`} class={`filter-tab ${catFilter === c ? 'active' : ''}`}>
+            {catIcon[c]} {catLabel[c]} <span style="opacity:0.6;margin-left:0.25rem">{counts[c]}</span>
+          </a>
+        ))}
+      </div>
+    )}
+
+    {/* Inventory list */}
+    {filtered.length > 0 && (
+      <div class="card card-divide">
+        {filtered.map(g => (
+          <div class="list-row" style="justify-content:space-between;gap:1rem">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.875rem;font-weight:600;color:var(--text)">
+                {catIcon[g.category]} {g.name}
+              </div>
+              <div style="font-size:0.75rem;color:var(--text-muted)">
+                {catLabel[g.category]}{g.notes ? ` · ${g.notes}` : ''}
+                {g.lowStockThreshold > 0 && <span style="color:var(--text-dim)"> · alert at {g.lowStockThreshold}</span>}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+              <form method="POST">
+                <input type="hidden" name="_action" value="adjust" />
+                <input type="hidden" name="id" value={g.id} />
+                <input type="hidden" name="delta" value="-1" />
+                <button type="submit" class="btn btn-secondary btn-sm">−1</button>
+              </form>
+              <span style={`font-size:0.9rem;font-weight:800;min-width:3rem;text-align:center;color:${g.lowStockThreshold > 0 && g.quantity <= g.lowStockThreshold ? '#f87171' : 'var(--text)'}`}>
+                {g.quantity} <span style="font-size:0.65rem;font-weight:400;color:var(--text-muted)">{g.unit}</span>
+              </span>
+              <form method="POST">
+                <input type="hidden" name="_action" value="adjust" />
+                <input type="hidden" name="id" value={g.id} />
+                <input type="hidden" name="delta" value="1" />
+                <button type="submit" class="btn btn-secondary btn-sm">+1</button>
+              </form>
+              <a href={`/gear/${g.id}/edit`} class="btn btn-secondary btn-sm">Edit</a>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {filtered.length === 0 && all.length > 0 && (
+      <div class="empty-state">
+        <div class="empty-state-text">No {catLabel[catFilter] ?? catFilter} items.</div>
+      </div>
+    )}
+
+    {/* Add form */}
+    <details class="accordion" id="add-gear">
+      <summary>+ Add Item</summary>
+      <form method="POST" class="form-section">
+        <input type="hidden" name="_action" value="add" />
+        <div class="form-row form-row-2">
+          <div><label>Name *</label><input name="name" type="text" required placeholder="Hoppe's No. 9" /></div>
+          <div>
+            <label>Category *</label>
+            <select name="category">
+              {cats.map(c => <option value={c}>{catIcon[c]} {catLabel[c]}</option>)}
+            </select>
+          </div>
+        </div>
+        <div class="form-row form-row-2">
+          <div><label>Quantity</label><input name="quantity" type="number" min="0" placeholder="0" /></div>
+          <div><label>Unit</label><input name="unit" type="text" placeholder="pcs / bottles / oz" /></div>
+        </div>
+        <div>
+          <label>Low Stock Alert (alert when at or below)</label>
+          <input name="lowStockThreshold" type="number" min="0" placeholder="0 = no alert" />
+        </div>
+        <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+        <button type="submit" class="btn btn-primary btn-full">Add Item</button>
+      </form>
+    </details>
+
+    {all.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">🧹</div>
+        <div class="empty-state-text">Track cleaning supplies, targets, batteries, and other range consumables.</div>
+      </div>
+    )}
+
+  </div>
+</Layout>

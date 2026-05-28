@@ -2,14 +2,22 @@
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
 import { firearms } from '../../db/schema';
-import { sql, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
+import { parseTags, tagColor } from '../../lib/tags';
 
 const typeFilter = Astro.url.searchParams.get('type') ?? 'all';
+const tagFilter  = Astro.url.searchParams.get('tag') ?? '';
 const all = await db.select().from(firearms).orderBy(sql`created_at DESC`);
-const filtered = typeFilter === 'all' ? all : all.filter(f => f.type === typeFilter);
+
+const filtered = all
+  .filter(f => typeFilter === 'all' || f.type === typeFilter)
+  .filter(f => !tagFilter || parseTags(f.tags).includes(tagFilter));
 
 const counts: Record<string, number> = { all: all.length };
 for (const f of all) counts[f.type] = (counts[f.type] ?? 0) + 1;
+
+// Collect all unique tags across all firearms
+const allTags = [...new Set(all.flatMap(f => parseTags(f.tags)))].sort();
 
 const types = ['pistol', 'rifle', 'shotgun', 'revolver', 'other'];
 const typeLabel: Record<string, string> = {
@@ -42,6 +50,30 @@ const typeIcon: Record<string, string> = {
             {typeLabel[t]} <span style="opacity:0.6;margin-left:0.25rem">{counts[t]}</span>
           </a>
         ))}
+      </div>
+    )}
+
+    <!-- Tag filter chips -->
+    {allTags.length > 0 && (
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span style="font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim)">Tags:</span>
+        {tagFilter && (
+          <a href={typeFilter === 'all' ? '/firearms' : `/firearms?type=${typeFilter}`}
+             style="font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:9999px;background:rgba(255,255,255,0.08);color:var(--text-muted);border:1px solid rgba(255,255,255,0.15);text-decoration:none">
+            ✕ clear
+          </a>
+        )}
+        {allTags.map(t => {
+          const color = tagColor(t);
+          const active = tagFilter === t;
+          const href = typeFilter === 'all' ? `/firearms?tag=${t}` : `/firearms?type=${typeFilter}&tag=${t}`;
+          return (
+            <a href={href}
+               style={`font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:9999px;text-decoration:none;border:1px solid ${color}44;color:${color};background:${active ? color + '22' : 'transparent'};font-weight:${active ? '700' : '400'}`}>
+              {t}
+            </a>
+          );
+        })}
       </div>
     )}
 
@@ -83,6 +115,10 @@ const typeIcon: Record<string, string> = {
                     ${f.purchasePrice.toLocaleString()}
                   </span>
                 )}
+                {parseTags(f.tags).map(t => {
+                  const color = tagColor(t);
+                  return <span style={`font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:9999px;border:1px solid ${color}44;color:${color}`}>{t}</span>;
+                })}
               </div>
             </div>
           </a>

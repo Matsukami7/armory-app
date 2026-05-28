@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
-import { firearms, rangeSessions, ammoInventory, sessionFirearms, maintenanceLogs } from '../db/schema';
+import { firearms, rangeSessions, ammoInventory, sessionFirearms, maintenanceLogs, gear } from '../db/schema';
 import { sql, sum, count, eq, and, isNotNull, desc } from 'drizzle-orm';
 
 const firearmCount   = (await db.select({ c: count() }).from(firearms))[0].c;
@@ -12,6 +12,7 @@ const totalInvest    = allFirearmData.reduce((s, f) => s + (f.purchasePrice ?? 0
 const collectionValue = allFirearmData.reduce((s, f) => s + (f.currentValue ?? f.purchasePrice ?? 0), 0);
 const recentSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`).limit(5);
 const lowAmmo        = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
+const lowGear        = await db.select().from(gear).where(sql`low_stock_threshold > 0 AND quantity <= low_stock_threshold`).orderBy(sql`name ASC`);
 
 // Range spend: sum of rounds_fired * cost_per_round for all sessions with ammo linked
 const spendRows = await db
@@ -170,6 +171,27 @@ for (const f of firearmsWithInterval) {
                 <div style="font-size:0.75rem;color:var(--text-muted)">{a.type}</div>
               </div>
               <span style={`font-size:1rem;font-weight:800;color:${a.quantity < 50 ? '#f87171' : '#f97316'}`}>{a.quantity}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <!-- Low gear stock -->
+    {lowGear.length > 0 && (
+      <div>
+        <div class="section-header">
+          <span style="color:#f97316;font-size:0.75rem">▲</span>
+          <span class="section-title">Low Gear Stock</span>
+        </div>
+        <div class="card card-divide">
+          {lowGear.map(g => (
+            <a href="/gear" class="list-row list-row-link" style="justify-content:space-between">
+              <div>
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{g.name}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">alert at {g.lowStockThreshold} {g.unit}</div>
+              </div>
+              <span style="font-size:1rem;font-weight:800;color:#f87171">{g.quantity} <span style="font-size:0.65rem;font-weight:400;color:var(--text-muted)">{g.unit}</span></span>
             </a>
           ))}
         </div>
