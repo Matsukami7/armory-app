@@ -1,8 +1,9 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { firearms, accessories, maintenanceLogs, sessionFirearms, rangeSessions } from '../../db/schema';
-import { eq, sum } from 'drizzle-orm';
+import { firearms, accessories, maintenanceLogs, sessionFirearms } from '../../db/schema';
+import { eq, sum, desc } from 'drizzle-orm';
+import { saveUpload } from '../../lib/uploads';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/firearms');
@@ -19,6 +20,17 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect('/firearms');
   }
 
+  if (action === 'upload_photo') {
+    const file = form.get('photo') as File | null;
+    if (file && file.size > 0) {
+      const photoPath = await saveUpload(file, `firearms`);
+      if (photoPath) {
+        await db.update(firearms).set({ photoPath }).where(eq(firearms.id, id));
+      }
+    }
+    return Astro.redirect(`/firearms/${id}`);
+  }
+
   if (action === 'add_maintenance') {
     await db.insert(maintenanceLogs).values({
       firearmId: id,
@@ -27,6 +39,12 @@ if (Astro.request.method === 'POST') {
       notes: form.get('notes') as string,
       roundCount: form.get('roundCount') ? parseInt(form.get('roundCount') as string) : null,
     });
+    return Astro.redirect(`/firearms/${id}`);
+  }
+
+  if (action === 'delete_log') {
+    const logId = parseInt(form.get('logId') as string);
+    await db.delete(maintenanceLogs).where(eq(maintenanceLogs.id, logId));
     return Astro.redirect(`/firearms/${id}`);
   }
 
@@ -42,10 +60,20 @@ if (Astro.request.method === 'POST') {
     });
     return Astro.redirect(`/firearms/${id}`);
   }
+
+  if (action === 'delete_accessory') {
+    const accId = parseInt(form.get('accId') as string);
+    await db.delete(accessories).where(eq(accessories.id, accId));
+    return Astro.redirect(`/firearms/${id}`);
+  }
 }
 
+// Re-fetch after possible update
+const [gun] = await db.select().from(firearms).where(eq(firearms.id, id));
 const accs = await db.select().from(accessories).where(eq(accessories.firearmId, id));
-const logs = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.firearmId, id)).orderBy(maintenanceLogs.date);
+const logs = await db.select().from(maintenanceLogs)
+  .where(eq(maintenanceLogs.firearmId, id))
+  .orderBy(desc(maintenanceLogs.date));
 const [roundsRow] = await db.select({ total: sum(sessionFirearms.roundsFired) })
   .from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
 const totalRounds = roundsRow?.total ?? 0;
@@ -53,36 +81,63 @@ const totalRounds = roundsRow?.total ?? 0;
 const typeLabel: Record<string, string> = {
   pistol: 'Pistol', rifle: 'Rifle', shotgun: 'Shotgun', revolver: 'Revolver', other: 'Other'
 };
+
+const logTypeIcon: Record<string, string> = {
+  cleaning: '🧹', repair: '🔧', inspection: '🔍', modification: '⚙️', note: '📝',
+};
 ---
 
-<Layout title={firearm.name} backHref="/firearms" backLabel="Firearms">
+<Layout title={gun.name} backHref="/firearms" backLabel="Firearms">
   <div class="px-4 py-5 space-y-6">
+
+    <!-- Photo -->
+    <div class="relative">
+      {gun.photoPath ? (
+        <img
+          src={gun.photoPath}
+          alt={gun.name}
+          class="w-full h-52 object-cover rounded-xl bg-zinc-800"
+        />
+      ) : (
+        <div class="w-full h-36 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-600">
+          <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+      )}
+      <form method="POST" enctype="multipart/form-data" class="absolute bottom-2 right-2">
+        <input type="hidden" name="_action" value="upload_photo" />
+        <label class="btn-secondary py-1.5 px-3 text-xs cursor-pointer">
+          {gun.photoPath ? 'Change Photo' : '+ Photo'}
+          <input type="file" name="photo" accept="image/*" class="hidden" onchange="this.form.submit()" />
+        </label>
+      </form>
+    </div>
 
     <!-- Firearm details -->
     <div class="card p-4 space-y-3">
       <div class="flex items-start justify-between">
         <div>
-          <h2 class="font-semibold">{firearm.make} {firearm.model}</h2>
-          <p class="text-sm text-zinc-500">{firearm.caliber} · {typeLabel[firearm.type] ?? firearm.type}</p>
+          <h2 class="font-semibold">{gun.make} {gun.model}</h2>
+          <p class="text-sm text-zinc-500">{gun.caliber} · {typeLabel[gun.type] ?? gun.type}</p>
         </div>
-        <div class="text-right">
-          <div class="text-xl font-bold text-amber-400">{Number(totalRounds).toLocaleString()}</div>
-          <div class="text-xs text-zinc-500">rounds fired</div>
+        <div class="flex items-center gap-3">
+          <div class="text-right">
+            <div class="text-xl font-bold text-amber-400">{Number(totalRounds).toLocaleString()}</div>
+            <div class="text-xs text-zinc-500">rounds</div>
+          </div>
+          <a href={`/firearms/${id}/edit`} class="btn-secondary py-1.5 px-3 text-xs">Edit</a>
         </div>
       </div>
 
-      {firearm.serial && <div class="text-xs text-zinc-500">S/N: {firearm.serial}</div>}
+      {gun.serial && <div class="text-xs text-zinc-500">S/N: {gun.serial}</div>}
 
-      <div class="grid grid-cols-2 gap-2 text-sm">
-        {firearm.purchaseDate && (
-          <div><span class="text-zinc-500">Bought:</span> {firearm.purchaseDate}</div>
-        )}
-        {firearm.purchasePrice && (
-          <div><span class="text-zinc-500">Paid:</span> ${firearm.purchasePrice.toFixed(2)}</div>
-        )}
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {gun.purchaseDate && <div><span class="text-zinc-500">Bought:</span> {gun.purchaseDate}</div>}
+        {gun.purchasePrice && <div><span class="text-zinc-500">Paid:</span> ${gun.purchasePrice.toFixed(2)}</div>}
       </div>
 
-      {firearm.notes && <p class="text-sm text-zinc-400 italic">{firearm.notes}</p>}
+      {gun.notes && <p class="text-sm text-zinc-400 italic border-t border-zinc-800 pt-3">{gun.notes}</p>}
     </div>
 
     <!-- Accessories -->
@@ -91,10 +146,17 @@ const typeLabel: Record<string, string> = {
       {accs.length > 0 && (
         <div class="card divide-y divide-zinc-800 mb-3">
           {accs.map(a => (
-            <div class="px-4 py-3">
-              <div class="text-sm font-medium">{a.name}</div>
-              <div class="text-xs text-zinc-500">{a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}</div>
-              {a.notes && <div class="text-xs text-zinc-400 mt-1">{a.notes}</div>}
+            <div class="px-4 py-3 flex items-start justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">{a.name}</div>
+                <div class="text-xs text-zinc-500">{a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}</div>
+                {a.notes && <div class="text-xs text-zinc-400 mt-1">{a.notes}</div>}
+              </div>
+              <form method="POST">
+                <input type="hidden" name="_action" value="delete_accessory" />
+                <input type="hidden" name="accId" value={a.id} />
+                <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+              </form>
             </div>
           ))}
         </div>
@@ -145,26 +207,38 @@ const typeLabel: Record<string, string> = {
       </details>
     </div>
 
-    <!-- Maintenance log -->
+    <!-- Log (maintenance + notes) -->
     <div>
-      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Maintenance</h2>
+      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Log</h2>
       {logs.length > 0 && (
         <div class="card divide-y divide-zinc-800 mb-3">
           {logs.map(l => (
             <div class="px-4 py-3">
-              <div class="flex justify-between items-start">
-                <div class="text-sm font-medium">{l.type.charAt(0).toUpperCase() + l.type.slice(1)}</div>
-                <div class="text-xs text-zinc-500">{l.date}</div>
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-base leading-none">{logTypeIcon[l.type] ?? '📋'}</span>
+                    <span class="text-sm font-medium capitalize">{l.type}</span>
+                    <span class="text-xs text-zinc-500">{l.date}</span>
+                  </div>
+                  <div class="text-sm text-zinc-400 mt-1 ml-6">{l.notes}</div>
+                  {l.roundCount && (
+                    <div class="text-xs text-zinc-500 mt-1 ml-6">{l.roundCount.toLocaleString()} rounds at service</div>
+                  )}
+                </div>
+                <form method="POST" class="flex-shrink-0">
+                  <input type="hidden" name="_action" value="delete_log" />
+                  <input type="hidden" name="logId" value={l.id} />
+                  <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+                </form>
               </div>
-              <div class="text-sm text-zinc-400 mt-0.5">{l.notes}</div>
-              {l.roundCount && <div class="text-xs text-zinc-500 mt-1">{l.roundCount.toLocaleString()} rounds at service</div>}
             </div>
           ))}
         </div>
       )}
 
       <details class="card">
-        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Log Maintenance</summary>
+        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Add Log Entry</summary>
         <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
           <input type="hidden" name="_action" value="add_maintenance" />
           <div class="grid grid-cols-2 gap-3">
@@ -175,6 +249,7 @@ const typeLabel: Record<string, string> = {
             <div>
               <label>Type</label>
               <select name="type">
+                <option value="note">Note</option>
                 <option value="cleaning">Cleaning</option>
                 <option value="repair">Repair</option>
                 <option value="inspection">Inspection</option>
@@ -184,19 +259,19 @@ const typeLabel: Record<string, string> = {
           </div>
           <div>
             <label>Notes *</label>
-            <textarea name="notes" rows="2" required placeholder="What was done..."></textarea>
+            <textarea name="notes" rows="3" required placeholder="What happened, what was done..."></textarea>
           </div>
           <div>
             <label>Round Count at Service</label>
-            <input name="roundCount" type="number" min="0" placeholder="Optional" />
+            <input name="roundCount" type="number" min="0" placeholder="Optional — for maintenance entries" />
           </div>
-          <button type="submit" class="btn-primary w-full">Save</button>
+          <button type="submit" class="btn-primary w-full">Save Entry</button>
         </form>
       </details>
     </div>
 
     <!-- Delete -->
-    <form method="POST" onsubmit="return confirm('Delete this firearm? This cannot be undone.')">
+    <form method="POST" onsubmit="return confirm('Delete this firearm and all its records? This cannot be undone.')">
       <input type="hidden" name="_action" value="delete" />
       <button type="submit" class="btn-danger w-full">Delete Firearm</button>
     </form>

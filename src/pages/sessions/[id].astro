@@ -24,10 +24,14 @@ if (Astro.request.method === 'POST') {
     const roundsFired = parseInt(form.get('roundsFired') as string) || 0;
     const ammoId = form.get('ammoId') ? parseInt(form.get('ammoId') as string) : null;
     await db.insert(sessionFirearms).values({ sessionId: id, firearmId, roundsFired, ammoId });
-    // Subtract from ammo inventory if linked
     if (ammoId && roundsFired > 0) {
       await db.run(sql`UPDATE ammo_inventory SET quantity = MAX(0, quantity - ${roundsFired}) WHERE id = ${ammoId}`);
     }
+  }
+
+  if (action === 'remove_firearm') {
+    const sfId = parseInt(form.get('sfId') as string);
+    await db.delete(sessionFirearms).where(eq(sessionFirearms.id, sfId));
   }
 
   if (action === 'add_drill') {
@@ -39,6 +43,11 @@ if (Astro.request.method === 'POST') {
       score: form.get('score') as string || null,
       notes: form.get('notes') as string || null,
     });
+  }
+
+  if (action === 'remove_drill') {
+    const drillId = parseInt(form.get('drillId') as string);
+    await db.delete(drills).where(eq(drills.id, drillId));
   }
 
   return Astro.redirect(`/sessions/${id}`);
@@ -68,14 +77,17 @@ const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
           <div class="font-semibold">{session.date}</div>
           {session.location && <div class="text-sm text-zinc-500">{session.location}</div>}
         </div>
-        <div class="text-right">
-          <div class="text-xl font-bold text-amber-400">{totalRounds.toLocaleString()}</div>
-          <div class="text-xs text-zinc-500">rounds</div>
+        <div class="flex items-center gap-3">
+          <div class="text-right">
+            <div class="text-xl font-bold text-amber-400">{totalRounds.toLocaleString()}</div>
+            <div class="text-xs text-zinc-500">rounds</div>
+          </div>
+          <a href={`/sessions/${id}/edit`} class="btn-secondary py-1.5 px-3 text-xs">Edit</a>
         </div>
       </div>
       {session.durationMinutes && <div class="text-sm text-zinc-500">{session.durationMinutes} min</div>}
       {session.weather && <div class="text-sm text-zinc-400">{session.weather}</div>}
-      {session.notes && <p class="text-sm text-zinc-400 italic">{session.notes}</p>}
+      {session.notes && <p class="text-sm text-zinc-400 italic border-t border-zinc-800 pt-2">{session.notes}</p>}
     </div>
 
     <!-- Firearms used -->
@@ -85,13 +97,18 @@ const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
       {sessionGuns.length > 0 && (
         <div class="card divide-y divide-zinc-800 mb-3">
           {sessionGuns.map(r => (
-            <div class="px-4 py-3">
-              <div class="flex justify-between items-start">
-                <div>
-                  <div class="text-sm font-medium">{r.f?.name ?? 'Unknown'}</div>
-                  {r.a && <div class="text-xs text-zinc-500">{r.a.brand} {r.a.grain}gr {r.a.caliber}</div>}
-                </div>
+            <div class="flex items-center justify-between px-4 py-3 gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">{r.f?.name ?? 'Unknown'}</div>
+                {r.a && <div class="text-xs text-zinc-500">{r.a.brand} {r.a.grain}gr {r.a.caliber}</div>}
+              </div>
+              <div class="flex items-center gap-3 flex-shrink-0">
                 <span class="text-sm font-semibold text-amber-400">{r.sf.roundsFired} rds</span>
+                <form method="POST">
+                  <input type="hidden" name="_action" value="remove_firearm" />
+                  <input type="hidden" name="sfId" value={r.sf.id} />
+                  <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+                </form>
               </div>
             </div>
           ))}
@@ -135,12 +152,21 @@ const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
         <div class="card divide-y divide-zinc-800 mb-3">
           {sessionDrills.map(d => (
             <div class="px-4 py-3">
-              <div class="flex justify-between items-start">
-                <div class="text-sm font-medium">{d.name}</div>
-                {d.score && <span class="text-sm font-semibold text-amber-400">{d.score}</span>}
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">{d.name}</span>
+                    {d.score && <span class="text-sm font-semibold text-amber-400">{d.score}</span>}
+                  </div>
+                  {d.distance && <div class="text-xs text-zinc-500">{d.distance}</div>}
+                  {d.notes && <div class="text-sm text-zinc-400 mt-1">{d.notes}</div>}
+                </div>
+                <form method="POST" class="flex-shrink-0">
+                  <input type="hidden" name="_action" value="remove_drill" />
+                  <input type="hidden" name="drillId" value={d.id} />
+                  <button type="submit" class="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+                </form>
               </div>
-              {d.distance && <div class="text-xs text-zinc-500">{d.distance}</div>}
-              {d.notes && <div class="text-sm text-zinc-400 mt-1">{d.notes}</div>}
             </div>
           ))}
         </div>
