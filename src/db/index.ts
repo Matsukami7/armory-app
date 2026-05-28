@@ -101,5 +101,10 @@ if (!firearmColumns.includes('generation')) {
   sqlite.exec("ALTER TABLE firearms ADD COLUMN generation TEXT");
 }
 
+const accColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('accessories')").all() as { name: string }[]).map(r => r.name);
+if (!accColumns.includes('lumens'))       sqlite.exec("ALTER TABLE accessories ADD COLUMN lumens INTEGER");
+if (!accColumns.includes('power_type'))   sqlite.exec("ALTER TABLE accessories ADD COLUMN power_type TEXT");
+if (!accColumns.includes('battery_type')) sqlite.exec("ALTER TABLE accessories ADD COLUMN battery_type TEXT");
+
 export const db = drizzle(sqlite, { schema });
 export type DB = typeof db;

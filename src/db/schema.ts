@@ -26,6 +26,9 @@ export const accessories = sqliteTable('accessories', {
   notes: text('notes'),
   purchaseDate: text('purchase_date'),
   purchasePrice: real('purchase_price'),
+  lumens: integer('lumens'),
+  powerType: text('power_type'),    // rechargeable | battery
+  batteryType: text('battery_type'), // CR123A, 18650, AA, AAA, CR2, other
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 

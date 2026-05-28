@@ -42,14 +42,18 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect(`/firearms/${id}`);
   }
   if (action === 'add_accessory') {
+    const accType = form.get('type') as string;
     await db.insert(accessories).values({
       firearmId:     id,
       name:          form.get('name') as string,
-      type:          form.get('type') as string,
+      type:          accType,
       make:          form.get('make') as string || null,
       model:         form.get('model') as string || null,
       notes:         form.get('notes') as string || null,
       purchasePrice: form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
+      lumens:        accType === 'light' && form.get('lumens') ? parseInt(form.get('lumens') as string) : null,
+      powerType:     accType === 'light' ? form.get('powerType') as string || null : null,
+      batteryType:   accType === 'light' && form.get('powerType') === 'battery' ? form.get('batteryType') as string || null : null,
     });
     return Astro.redirect(`/firearms/${id}`);
   }
@@ -147,13 +151,28 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
       {accs.length > 0 && (
         <div class="card card-divide" style="margin-bottom:0.75rem">
           {accs.map(a => (
-            <div class="list-row" style="justify-content:space-between">
-              <div>
-                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{a.name}</div>
-                <div style="font-size:0.75rem;color:var(--text-muted)">
+            <div class="list-row" style="justify-content:space-between;align-items:flex-start">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                  <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{a.name}</span>
+                  {a.type === 'light' && a.lumens && (
+                    <span class="pill pill-accent">{a.lumens} lm</span>
+                  )}
+                </div>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
                   {a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}
                   {a.purchasePrice ? ` · $${a.purchasePrice.toFixed(2)}` : ''}
                 </div>
+                {a.type === 'light' && a.powerType && (
+                  <div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.25rem">
+                    <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim)">
+                      {a.powerType === 'rechargeable' ? '⚡ Rechargeable' : `🔋 Battery`}
+                    </span>
+                    {a.powerType === 'battery' && a.batteryType && (
+                      <span class="pill pill-default" style="font-size:0.65rem">{a.batteryType}</span>
+                    )}
+                  </div>
+                )}
                 {a.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{a.notes}</div>}
               </div>
               <form method="POST">
@@ -167,13 +186,13 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
       )}
       <details class="accordion">
         <summary>+ Add Accessory</summary>
-        <form method="POST" class="form-section">
+        <form method="POST" class="form-section" id="acc-form">
           <input type="hidden" name="_action" value="add_accessory" />
           <div><label>Name *</label><input name="name" type="text" required placeholder="Trijicon RMR" /></div>
           <div class="form-row form-row-2">
             <div>
               <label>Type</label>
-              <select name="type">
+              <select name="type" id="acc-type" onchange="updateAccForm()">
                 <option value="optic">Optic</option>
                 <option value="light">Light</option>
                 <option value="suppressor">Suppressor</option>
@@ -189,10 +208,51 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
             <div><label>Make</label><input name="make" type="text" /></div>
             <div><label>Model</label><input name="model" type="text" /></div>
           </div>
+
+          <!-- Light-specific fields -->
+          <div id="light-fields" style="display:none;border-top:1px solid var(--border);padding-top:0.75rem;margin-top:0.25rem">
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:0.75rem">Light Details</div>
+            <div class="form-row form-row-2">
+              <div><label>Lumens</label><input name="lumens" type="number" min="1" placeholder="e.g. 1000" /></div>
+              <div>
+                <label>Power Source</label>
+                <select name="powerType" id="acc-power" onchange="updateAccForm()">
+                  <option value="">Select...</option>
+                  <option value="rechargeable">Rechargeable</option>
+                  <option value="battery">Battery Powered</option>
+                </select>
+              </div>
+            </div>
+            <div id="battery-fields" style="display:none">
+              <label>Battery Type</label>
+              <select name="batteryType">
+                <option value="">Select...</option>
+                <option value="CR123A">CR123A</option>
+                <option value="18650">18650</option>
+                <option value="AA">AA</option>
+                <option value="AAA">AAA</option>
+                <option value="CR2">CR2</option>
+                <option value="16340">16340</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
           <div><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
           <button type="submit" class="btn btn-primary">Add Accessory</button>
         </form>
       </details>
+
+      <script>
+        function updateAccForm() {
+          const type = document.getElementById('acc-type')?.value;
+          const power = document.getElementById('acc-power')?.value;
+          const lightFields = document.getElementById('light-fields');
+          const batteryFields = document.getElementById('battery-fields');
+          if (lightFields) lightFields.style.display = type === 'light' ? 'block' : 'none';
+          if (batteryFields) batteryFields.style.display = power === 'battery' ? 'block' : 'none';
+        }
+      </script>
     </div>
 
     <!-- Log -->
