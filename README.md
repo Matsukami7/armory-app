@@ -45,6 +45,13 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 - Purchase log per ammo type — track when you bought, how much, total cost, and retailer; automatically updates quantity
 - Dashboard warns when any ammo type drops below 100 rounds
 
+### Printable Range Card
+- Generate a blank range card to take to the range for handwritten notes
+- Optionally pre-select which firearms you're bringing — they populate the Firearm column automatically
+- Configurable number of firearm rows and drill rows
+- Clean black-on-white print layout — app chrome (sidebar, nav) is hidden when printing
+- Accessible from the Range (sessions) page via the 🖨 Range Card button
+
 ### Settings & Backup
 - One-click database download from the Settings page — no SSH required
 - Vault summary showing total firearms, sessions, and ammo types
