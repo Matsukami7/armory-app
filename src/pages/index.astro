@@ -1,0 +1,93 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { db } from '../db';
+import { firearms, rangeSessions, ammoInventory, sessionFirearms } from '../db/schema';
+import { sql, sum, count } from 'drizzle-orm';
+
+const firearmCount = (await db.select({ c: count() }).from(firearms))[0].c;
+const sessionCount = (await db.select({ c: count() }).from(rangeSessions))[0].c;
+const totalRounds = (await db.select({ s: sum(sessionFirearms.roundsFired) }).from(sessionFirearms))[0].s ?? 0;
+const recentSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`).limit(5);
+const lowAmmo = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
+---
+
+<Layout title="Dashboard">
+  <div class="px-4 py-5 space-y-6">
+
+    <!-- Stats row -->
+    <div class="grid grid-cols-3 gap-3">
+      <div class="card p-4 text-center">
+        <div class="text-2xl font-bold text-amber-400">{firearmCount}</div>
+        <div class="text-xs text-zinc-500 mt-1">Firearms</div>
+      </div>
+      <div class="card p-4 text-center">
+        <div class="text-2xl font-bold text-amber-400">{sessionCount}</div>
+        <div class="text-xs text-zinc-500 mt-1">Sessions</div>
+      </div>
+      <div class="card p-4 text-center">
+        <div class="text-2xl font-bold text-amber-400">{totalRounds.toLocaleString()}</div>
+        <div class="text-xs text-zinc-500 mt-1">Rounds</div>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="grid grid-cols-2 gap-3">
+      <a href="/sessions/new" class="btn-primary justify-center py-3">
+        + Log Session
+      </a>
+      <a href="/firearms/new" class="btn-secondary justify-center py-3">
+        + Add Firearm
+      </a>
+    </div>
+
+    <!-- Recent sessions -->
+    {recentSessions.length > 0 && (
+      <div>
+        <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Recent Sessions</h2>
+        <div class="card divide-y divide-zinc-800">
+          {recentSessions.map(s => (
+            <a href={`/sessions/${s.id}`} class="flex items-center justify-between px-4 py-3 hover:bg-zinc-800/50 transition-colors">
+              <div>
+                <div class="text-sm font-medium">{s.date}</div>
+                {s.location && <div class="text-xs text-zinc-500">{s.location}</div>}
+              </div>
+              <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+          ))}
+        </div>
+        {sessionCount > 5 && (
+          <a href="/sessions" class="block text-center text-xs text-amber-500 hover:text-amber-400 mt-3">View all sessions</a>
+        )}
+      </div>
+    )}
+
+    <!-- Low ammo warning -->
+    {lowAmmo.length > 0 && (
+      <div>
+        <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Low Ammo</h2>
+        <div class="card divide-y divide-zinc-800">
+          {lowAmmo.map(a => (
+            <a href="/ammo" class="flex items-center justify-between px-4 py-3 hover:bg-zinc-800/50 transition-colors">
+              <div>
+                <div class="text-sm font-medium">{a.brand} {a.grain}gr {a.caliber}</div>
+                <div class="text-xs text-zinc-500">{a.type}</div>
+              </div>
+              <span class={`text-sm font-semibold ${a.quantity < 50 ? 'text-red-400' : 'text-amber-400'}`}>{a.quantity}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {firearmCount === 0 && sessionCount === 0 && (
+      <div class="text-center py-12 text-zinc-600">
+        <div class="text-4xl mb-3">🎯</div>
+        <p class="text-sm">Add your first firearm to get started.</p>
+        <a href="/firearms/new" class="btn-primary mt-4 inline-flex">Add Firearm</a>
+      </div>
+    )}
+
+  </div>
+</Layout>

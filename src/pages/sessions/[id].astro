@@ -1,0 +1,190 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { rangeSessions, sessionFirearms, firearms, ammoInventory, drills } from '../../db/schema';
+import { eq, sql } from 'drizzle-orm';
+
+const id = parseInt(Astro.params.id!);
+if (isNaN(id)) return Astro.redirect('/sessions');
+
+const [session] = await db.select().from(rangeSessions).where(eq(rangeSessions.id, id));
+if (!session) return Astro.redirect('/sessions');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'delete') {
+    await db.delete(rangeSessions).where(eq(rangeSessions.id, id));
+    return Astro.redirect('/sessions');
+  }
+
+  if (action === 'add_firearm') {
+    const firearmId = parseInt(form.get('firearmId') as string);
+    const roundsFired = parseInt(form.get('roundsFired') as string) || 0;
+    const ammoId = form.get('ammoId') ? parseInt(form.get('ammoId') as string) : null;
+    await db.insert(sessionFirearms).values({ sessionId: id, firearmId, roundsFired, ammoId });
+    // Subtract from ammo inventory if linked
+    if (ammoId && roundsFired > 0) {
+      await db.run(sql`UPDATE ammo_inventory SET quantity = MAX(0, quantity - ${roundsFired}) WHERE id = ${ammoId}`);
+    }
+  }
+
+  if (action === 'add_drill') {
+    await db.insert(drills).values({
+      sessionId: id,
+      firearmId: form.get('firearmId') ? parseInt(form.get('firearmId') as string) : null,
+      name: form.get('name') as string,
+      distance: form.get('distance') as string || null,
+      score: form.get('score') as string || null,
+      notes: form.get('notes') as string || null,
+    });
+  }
+
+  return Astro.redirect(`/sessions/${id}`);
+}
+
+const sessionGuns = await db
+  .select({ sf: sessionFirearms, f: firearms, a: ammoInventory })
+  .from(sessionFirearms)
+  .leftJoin(firearms, eq(sessionFirearms.firearmId, firearms.id))
+  .leftJoin(ammoInventory, eq(sessionFirearms.ammoId, ammoInventory.id))
+  .where(eq(sessionFirearms.sessionId, id));
+
+const sessionDrills = await db.select().from(drills).where(eq(drills.sessionId, id));
+const allFirearms = await db.select().from(firearms);
+const allAmmo = await db.select().from(ammoInventory);
+
+const totalRounds = sessionGuns.reduce((sum, r) => sum + r.sf.roundsFired, 0);
+---
+
+<Layout title={`Session — ${session.date}`} backHref="/sessions" backLabel="Sessions">
+  <div class="px-4 py-5 space-y-6">
+
+    <!-- Session header -->
+    <div class="card p-4 space-y-2">
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="font-semibold">{session.date}</div>
+          {session.location && <div class="text-sm text-zinc-500">{session.location}</div>}
+        </div>
+        <div class="text-right">
+          <div class="text-xl font-bold text-amber-400">{totalRounds.toLocaleString()}</div>
+          <div class="text-xs text-zinc-500">rounds</div>
+        </div>
+      </div>
+      {session.durationMinutes && <div class="text-sm text-zinc-500">{session.durationMinutes} min</div>}
+      {session.weather && <div class="text-sm text-zinc-400">{session.weather}</div>}
+      {session.notes && <p class="text-sm text-zinc-400 italic">{session.notes}</p>}
+    </div>
+
+    <!-- Firearms used -->
+    <div>
+      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Firearms Used</h2>
+
+      {sessionGuns.length > 0 && (
+        <div class="card divide-y divide-zinc-800 mb-3">
+          {sessionGuns.map(r => (
+            <div class="px-4 py-3">
+              <div class="flex justify-between items-start">
+                <div>
+                  <div class="text-sm font-medium">{r.f?.name ?? 'Unknown'}</div>
+                  {r.a && <div class="text-xs text-zinc-500">{r.a.brand} {r.a.grain}gr {r.a.caliber}</div>}
+                </div>
+                <span class="text-sm font-semibold text-amber-400">{r.sf.roundsFired} rds</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <details class="card">
+        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Add Firearm</summary>
+        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+          <input type="hidden" name="_action" value="add_firearm" />
+          <div>
+            <label>Firearm *</label>
+            <select name="firearmId" required>
+              <option value="">Select...</option>
+              {allFirearms.map(f => <option value={f.id}>{f.name} ({f.caliber})</option>)}
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label>Rounds Fired</label>
+              <input name="roundsFired" type="number" min="0" placeholder="0" />
+            </div>
+            <div>
+              <label>Ammo Used</label>
+              <select name="ammoId">
+                <option value="">None</option>
+                {allAmmo.map(a => <option value={a.id}>{a.brand} {a.grain}gr {a.caliber} ({a.quantity} left)</option>)}
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary w-full">Add</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Drills -->
+    <div>
+      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Drills</h2>
+
+      {sessionDrills.length > 0 && (
+        <div class="card divide-y divide-zinc-800 mb-3">
+          {sessionDrills.map(d => (
+            <div class="px-4 py-3">
+              <div class="flex justify-between items-start">
+                <div class="text-sm font-medium">{d.name}</div>
+                {d.score && <span class="text-sm font-semibold text-amber-400">{d.score}</span>}
+              </div>
+              {d.distance && <div class="text-xs text-zinc-500">{d.distance}</div>}
+              {d.notes && <div class="text-sm text-zinc-400 mt-1">{d.notes}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <details class="card">
+        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Log Drill</summary>
+        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+          <input type="hidden" name="_action" value="add_drill" />
+          <div>
+            <label>Drill Name *</label>
+            <input name="name" type="text" required placeholder="e.g. Dot Torture, FAST Drill" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label>Distance</label>
+              <input name="distance" type="text" placeholder="e.g. 7 yards" />
+            </div>
+            <div>
+              <label>Score / Result</label>
+              <input name="score" type="text" placeholder="e.g. 48/50" />
+            </div>
+          </div>
+          <div>
+            <label>Firearm</label>
+            <select name="firearmId">
+              <option value="">Select...</option>
+              {allFirearms.map(f => <option value={f.id}>{f.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Notes</label>
+            <textarea name="notes" rows="2" placeholder="Observations, what to work on, etc."></textarea>
+          </div>
+          <button type="submit" class="btn-primary w-full">Add Drill</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Delete -->
+    <form method="POST" onsubmit="return confirm('Delete this session? This cannot be undone.')">
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="btn-danger w-full">Delete Session</button>
+    </form>
+
+  </div>
+</Layout>

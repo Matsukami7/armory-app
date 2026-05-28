@@ -1,0 +1,12 @@
+services:
+  armory:
+    build: .
+    container_name: armory
+    restart: unless-stopped
+    ports:
+      - "4321:4321"
+    volumes:
+      - ./data:/data
+    environment:
+      - DB_PATH=/data/armory.db
+      - ARMORY_PASSWORD=${ARMORY_PASSWORD:-}

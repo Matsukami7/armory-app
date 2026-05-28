@@ -1,0 +1,205 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { firearms, accessories, maintenanceLogs, sessionFirearms, rangeSessions } from '../../db/schema';
+import { eq, sum } from 'drizzle-orm';
+
+const id = parseInt(Astro.params.id!);
+if (isNaN(id)) return Astro.redirect('/firearms');
+
+const [firearm] = await db.select().from(firearms).where(eq(firearms.id, id));
+if (!firearm) return Astro.redirect('/firearms');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'delete') {
+    await db.delete(firearms).where(eq(firearms.id, id));
+    return Astro.redirect('/firearms');
+  }
+
+  if (action === 'add_maintenance') {
+    await db.insert(maintenanceLogs).values({
+      firearmId: id,
+      date: form.get('date') as string,
+      type: form.get('type') as string,
+      notes: form.get('notes') as string,
+      roundCount: form.get('roundCount') ? parseInt(form.get('roundCount') as string) : null,
+    });
+    return Astro.redirect(`/firearms/${id}`);
+  }
+
+  if (action === 'add_accessory') {
+    await db.insert(accessories).values({
+      firearmId: id,
+      name: form.get('name') as string,
+      type: form.get('type') as string,
+      make: form.get('make') as string || null,
+      model: form.get('model') as string || null,
+      notes: form.get('notes') as string || null,
+      purchasePrice: form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
+    });
+    return Astro.redirect(`/firearms/${id}`);
+  }
+}
+
+const accs = await db.select().from(accessories).where(eq(accessories.firearmId, id));
+const logs = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.firearmId, id)).orderBy(maintenanceLogs.date);
+const [roundsRow] = await db.select({ total: sum(sessionFirearms.roundsFired) })
+  .from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
+const totalRounds = roundsRow?.total ?? 0;
+
+const typeLabel: Record<string, string> = {
+  pistol: 'Pistol', rifle: 'Rifle', shotgun: 'Shotgun', revolver: 'Revolver', other: 'Other'
+};
+---
+
+<Layout title={firearm.name} backHref="/firearms" backLabel="Firearms">
+  <div class="px-4 py-5 space-y-6">
+
+    <!-- Firearm details -->
+    <div class="card p-4 space-y-3">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="font-semibold">{firearm.make} {firearm.model}</h2>
+          <p class="text-sm text-zinc-500">{firearm.caliber} · {typeLabel[firearm.type] ?? firearm.type}</p>
+        </div>
+        <div class="text-right">
+          <div class="text-xl font-bold text-amber-400">{Number(totalRounds).toLocaleString()}</div>
+          <div class="text-xs text-zinc-500">rounds fired</div>
+        </div>
+      </div>
+
+      {firearm.serial && <div class="text-xs text-zinc-500">S/N: {firearm.serial}</div>}
+
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        {firearm.purchaseDate && (
+          <div><span class="text-zinc-500">Bought:</span> {firearm.purchaseDate}</div>
+        )}
+        {firearm.purchasePrice && (
+          <div><span class="text-zinc-500">Paid:</span> ${firearm.purchasePrice.toFixed(2)}</div>
+        )}
+      </div>
+
+      {firearm.notes && <p class="text-sm text-zinc-400 italic">{firearm.notes}</p>}
+    </div>
+
+    <!-- Accessories -->
+    <div>
+      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Accessories</h2>
+      {accs.length > 0 && (
+        <div class="card divide-y divide-zinc-800 mb-3">
+          {accs.map(a => (
+            <div class="px-4 py-3">
+              <div class="text-sm font-medium">{a.name}</div>
+              <div class="text-xs text-zinc-500">{a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}</div>
+              {a.notes && <div class="text-xs text-zinc-400 mt-1">{a.notes}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <details class="card">
+        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Add Accessory</summary>
+        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+          <input type="hidden" name="_action" value="add_accessory" />
+          <div>
+            <label>Name *</label>
+            <input name="name" type="text" required placeholder="Trijicon RMR" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label>Type</label>
+              <select name="type">
+                <option value="optic">Optic</option>
+                <option value="light">Light</option>
+                <option value="suppressor">Suppressor</option>
+                <option value="grip">Grip</option>
+                <option value="stock">Stock</option>
+                <option value="trigger">Trigger</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label>Price ($)</label>
+              <input name="purchasePrice" type="number" step="0.01" min="0" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label>Make</label>
+              <input name="make" type="text" />
+            </div>
+            <div>
+              <label>Model</label>
+              <input name="model" type="text" />
+            </div>
+          </div>
+          <div>
+            <label>Notes</label>
+            <textarea name="notes" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn-primary w-full">Add</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Maintenance log -->
+    <div>
+      <h2 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Maintenance</h2>
+      {logs.length > 0 && (
+        <div class="card divide-y divide-zinc-800 mb-3">
+          {logs.map(l => (
+            <div class="px-4 py-3">
+              <div class="flex justify-between items-start">
+                <div class="text-sm font-medium">{l.type.charAt(0).toUpperCase() + l.type.slice(1)}</div>
+                <div class="text-xs text-zinc-500">{l.date}</div>
+              </div>
+              <div class="text-sm text-zinc-400 mt-0.5">{l.notes}</div>
+              {l.roundCount && <div class="text-xs text-zinc-500 mt-1">{l.roundCount.toLocaleString()} rounds at service</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <details class="card">
+        <summary class="px-4 py-3 text-sm cursor-pointer text-amber-400 hover:text-amber-300">+ Log Maintenance</summary>
+        <form method="POST" class="px-4 pb-4 space-y-3 border-t border-zinc-800 pt-4">
+          <input type="hidden" name="_action" value="add_maintenance" />
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label>Date *</label>
+              <input name="date" type="date" required />
+            </div>
+            <div>
+              <label>Type</label>
+              <select name="type">
+                <option value="cleaning">Cleaning</option>
+                <option value="repair">Repair</option>
+                <option value="inspection">Inspection</option>
+                <option value="modification">Modification</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label>Notes *</label>
+            <textarea name="notes" rows="2" required placeholder="What was done..."></textarea>
+          </div>
+          <div>
+            <label>Round Count at Service</label>
+            <input name="roundCount" type="number" min="0" placeholder="Optional" />
+          </div>
+          <button type="submit" class="btn-primary w-full">Save</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Delete -->
+    <form method="POST" onsubmit="return confirm('Delete this firearm? This cannot be undone.')">
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="btn-danger w-full">Delete Firearm</button>
+    </form>
+
+  </div>
+</Layout>

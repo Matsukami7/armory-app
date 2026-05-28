@@ -1,0 +1,95 @@
+import Database from 'better-sqlite3';
+import { resolve } from 'path';
+import { mkdirSync } from 'fs';
+
+const dbPath = process.env.DB_PATH ?? resolve(process.cwd(), 'data/armory.db');
+mkdirSync(resolve(dbPath, '..'), { recursive: true });
+
+const sqlite = new Database(dbPath);
+sqlite.pragma('journal_mode = WAL');
+sqlite.pragma('foreign_keys = ON');
+
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS firearms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    make TEXT NOT NULL,
+    model TEXT NOT NULL,
+    caliber TEXT NOT NULL,
+    serial TEXT,
+    type TEXT NOT NULL,
+    purchase_date TEXT,
+    purchase_price REAL,
+    notes TEXT,
+    photo_path TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS accessories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firearm_id INTEGER REFERENCES firearms(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    make TEXT,
+    model TEXT,
+    notes TEXT,
+    purchase_date TEXT,
+    purchase_price REAL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS maintenance_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firearm_id INTEGER NOT NULL REFERENCES firearms(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    type TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    round_count INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS ammo_inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    caliber TEXT NOT NULL,
+    brand TEXT NOT NULL,
+    grain INTEGER,
+    type TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    cost_per_round REAL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS range_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    location TEXT,
+    duration_minutes INTEGER,
+    weather TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS session_firearms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES range_sessions(id) ON DELETE CASCADE,
+    firearm_id INTEGER NOT NULL REFERENCES firearms(id),
+    rounds_fired INTEGER NOT NULL DEFAULT 0,
+    ammo_id INTEGER REFERENCES ammo_inventory(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS drills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES range_sessions(id) ON DELETE CASCADE,
+    firearm_id INTEGER REFERENCES firearms(id),
+    name TEXT NOT NULL,
+    distance TEXT,
+    score TEXT,
+    notes TEXT,
+    target_photo_path TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+console.log('Database initialized at', dbPath);
+sqlite.close();

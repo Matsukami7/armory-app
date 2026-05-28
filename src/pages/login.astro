@@ -1,0 +1,48 @@
+---
+import '../styles/global.css';
+import { isAuthenticated } from '../lib/auth';
+
+if (isAuthenticated(Astro.request)) {
+  return Astro.redirect('/');
+}
+
+const error = Astro.url.searchParams.get('error');
+---
+
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-zinc-950">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login — Armory</title>
+  </head>
+  <body class="h-full flex items-center justify-center px-6">
+    <div class="w-full max-w-sm">
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-3">🔒</div>
+        <h1 class="text-2xl font-bold text-zinc-100">Armory</h1>
+        <p class="text-sm text-zinc-500 mt-1">Your personal range log</p>
+      </div>
+
+      <form method="POST" action="/api/auth/login" class="card p-6 space-y-4">
+        <div>
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            autofocus
+            required
+          />
+        </div>
+
+        {error && (
+          <p class="text-sm text-red-400">{error === 'wrong' ? 'Incorrect password.' : 'Something went wrong.'}</p>
+        )}
+
+        <button type="submit" class="btn-primary w-full">Unlock</button>
+      </form>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { firearms } from '../../db/schema';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const [inserted] = await db.insert(firearms).values({
+    name: form.get('name') as string,
+    make: form.get('make') as string,
+    model: form.get('model') as string,
+    caliber: form.get('caliber') as string,
+    serial: form.get('serial') as string || null,
+    type: form.get('type') as string,
+    purchaseDate: form.get('purchaseDate') as string || null,
+    purchasePrice: form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
+    notes: form.get('notes') as string || null,
+  }).returning({ id: firearms.id });
+  return Astro.redirect(`/firearms/${inserted.id}`);
+}
+---
+
+<Layout title="Add Firearm" backHref="/firearms" backLabel="Firearms">
+  <form method="POST" class="px-4 py-5 space-y-4">
+
+    <div>
+      <label for="name">Nickname / Name <span class="text-red-400">*</span></label>
+      <input id="name" name="name" type="text" required placeholder="e.g. Duty Glock" />
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="make">Make <span class="text-red-400">*</span></label>
+        <input id="make" name="make" type="text" required placeholder="Glock" />
+      </div>
+      <div>
+        <label for="model">Model <span class="text-red-400">*</span></label>
+        <input id="model" name="model" type="text" required placeholder="19" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="caliber">Caliber <span class="text-red-400">*</span></label>
+        <input id="caliber" name="caliber" type="text" required placeholder="9mm" />
+      </div>
+      <div>
+        <label for="type">Type <span class="text-red-400">*</span></label>
+        <select id="type" name="type" required>
+          <option value="pistol">Pistol</option>
+          <option value="rifle">Rifle</option>
+          <option value="shotgun">Shotgun</option>
+          <option value="revolver">Revolver</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label for="serial">Serial Number</label>
+      <input id="serial" name="serial" type="text" placeholder="Optional" />
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="purchaseDate">Purchase Date</label>
+        <input id="purchaseDate" name="purchaseDate" type="date" />
+      </div>
+      <div>
+        <label for="purchasePrice">Purchase Price ($)</label>
+        <input id="purchasePrice" name="purchasePrice" type="number" step="0.01" min="0" placeholder="0.00" />
+      </div>
+    </div>
+
+    <div>
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="3" placeholder="Modifications, history, etc."></textarea>
+    </div>
+
+    <button type="submit" class="btn-primary w-full">Save Firearm</button>
+  </form>
+</Layout>
