@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { firearms, accessories, maintenanceLogs, sessionFirearms } from '../../db/schema';
+import { firearms, firearmPhotos, accessories, maintenanceLogs, sessionFirearms } from '../../db/schema';
 import { eq, sum, desc } from 'drizzle-orm';
 import { saveUpload } from '../../lib/uploads';
 
@@ -25,6 +25,25 @@ if (Astro.request.method === 'POST') {
       const photoPath = await saveUpload(file, 'firearms');
       if (photoPath) await db.update(firearms).set({ photoPath }).where(eq(firearms.id, id));
     }
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'add_gallery_photo') {
+    const file = form.get('photo') as File | null;
+    if (file && file.size > 0) {
+      const path = await saveUpload(file, 'firearms');
+      if (path) await db.insert(firearmPhotos).values({ firearmId: id, path, caption: form.get('caption') as string || null });
+    }
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'delete_gallery_photo') {
+    await db.delete(firearmPhotos).where(eq(firearmPhotos.id, parseInt(form.get('photoId') as string)));
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'set_primary_photo') {
+    const path = form.get('path') as string;
+    const photoId = parseInt(form.get('photoId') as string);
+    await db.update(firearms).set({ photoPath: path }).where(eq(firearms.id, id));
+    await db.delete(firearmPhotos).where(eq(firearmPhotos.id, photoId));
     return Astro.redirect(`/firearms/${id}`);
   }
   if (action === 'add_maintenance') {
@@ -64,6 +83,7 @@ if (Astro.request.method === 'POST') {
 }
 
 const [gun]      = await db.select().from(firearms).where(eq(firearms.id, id));
+const gallery    = await db.select().from(firearmPhotos).where(eq(firearmPhotos.firearmId, id)).orderBy(desc(firearmPhotos.createdAt));
 const accs       = await db.select().from(accessories).where(eq(accessories.firearmId, id));
 const logs       = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.firearmId, id)).orderBy(desc(maintenanceLogs.date));
 const [rRow]     = await db.select({ total: sum(sessionFirearms.roundsFired) }).from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
@@ -83,7 +103,7 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
     <!-- Photo + overview -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
 
-      <!-- Photo -->
+      <!-- Primary photo -->
       <div class="card" style="overflow:hidden;position:relative">
         {gun.photoPath
           ? <img src={gun.photoPath} alt={gun.name} style="width:100%;height:14rem;object-fit:cover;display:block" />
@@ -111,12 +131,23 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
             <div class="stat-card-sub">lifetime total</div>
           </div>
         </div>
-        {gun.purchasePrice && (
+        {(gun.purchasePrice || gun.currentValue) && (
           <div class="stat-card" style="flex:1">
             <div>
-              <div class="stat-card-label">Purchase Price</div>
-              <div class="stat-card-value" style="color:#22c55e">${gun.purchasePrice.toFixed(2)}</div>
-              {gun.purchaseDate && <div class="stat-card-sub">{gun.purchaseDate}</div>}
+              {gun.currentValue && (
+                <>
+                  <div class="stat-card-label">Est. Value</div>
+                  <div class="stat-card-value" style="color:#22c55e">${gun.currentValue.toFixed(2)}</div>
+                  {gun.purchasePrice && <div class="stat-card-sub">paid ${gun.purchasePrice.toFixed(2)}</div>}
+                </>
+              )}
+              {!gun.currentValue && gun.purchasePrice && (
+                <>
+                  <div class="stat-card-label">Purchase Price</div>
+                  <div class="stat-card-value" style="color:#22c55e">${gun.purchasePrice.toFixed(2)}</div>
+                  {gun.purchaseDate && <div class="stat-card-sub">{gun.purchaseDate}</div>}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -126,7 +157,7 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
             <div style="font-family:ui-monospace,monospace;font-size:0.875rem;color:var(--text)">{gun.serial}</div>
           </div>
         )}
-        <div style="display:flex;gap:0.5rem">
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <span class="pill pill-accent">{typeLabel[gun.type] ?? gun.type}</span>
           <span class="pill pill-default">{gun.caliber}</span>
           {gun.generation && <span class="pill pill-default">{gun.generation}</span>}
@@ -134,6 +165,47 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
       </div>
 
     </div>
+
+    <!-- Photo gallery -->
+    {(gallery.length > 0 || true) && (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◻</span>
+          <span class="section-title">Photo Gallery</span>
+        </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-start">
+          {gallery.map(p => (
+            <div style="position:relative;flex-shrink:0">
+              <a href={p.path} target="_blank">
+                <img src={p.path} alt={p.caption ?? ''} style="width:8rem;height:6rem;object-fit:cover;border-radius:0.375rem;border:1px solid var(--border);display:block" />
+              </a>
+              <div style="display:flex;gap:0.25rem;margin-top:0.25rem">
+                <form method="POST" style="flex:1">
+                  <input type="hidden" name="_action" value="set_primary_photo" />
+                  <input type="hidden" name="photoId" value={p.id} />
+                  <input type="hidden" name="path" value={p.path} />
+                  <button type="submit" class="btn btn-secondary btn-sm" style="width:100%;font-size:0.65rem;padding:0.2rem 0.4rem" title="Set as cover photo">Cover</button>
+                </form>
+                <form method="POST">
+                  <input type="hidden" name="_action" value="delete_gallery_photo" />
+                  <input type="hidden" name="photoId" value={p.id} />
+                  <button type="submit" class="btn-delete" title="Delete photo">✕</button>
+                </form>
+              </div>
+            </div>
+          ))}
+          <!-- Upload new gallery photo -->
+          <form method="POST" enctype="multipart/form-data" style="flex-shrink:0">
+            <input type="hidden" name="_action" value="add_gallery_photo" />
+            <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:8rem;height:6rem;border:1px dashed var(--border);border-radius:0.375rem;cursor:pointer;color:var(--text-dim);font-size:0.75rem;gap:0.25rem;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+              Add Photo
+              <input type="file" name="photo" accept="image/*" style="display:none" onchange="this.form.submit()" />
+            </label>
+          </form>
+        </div>
+      </div>
+    )}
 
     {gun.notes && (
       <div class="card" style="padding:1.25rem">
@@ -208,8 +280,6 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
             <div><label>Make</label><input name="make" type="text" /></div>
             <div><label>Model</label><input name="model" type="text" /></div>
           </div>
-
-          <!-- Light-specific fields -->
           <div id="light-fields" style="display:none;border-top:1px solid var(--border);padding-top:0.75rem;margin-top:0.25rem">
             <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:0.75rem">Light Details</div>
             <div class="form-row form-row-2">
@@ -237,12 +307,10 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
               </select>
             </div>
           </div>
-
           <div><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
           <button type="submit" class="btn btn-primary">Add Accessory</button>
         </form>
       </details>
-
       <script>
         function updateAccForm() {
           const type = document.getElementById('acc-type')?.value;

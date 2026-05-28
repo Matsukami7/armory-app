@@ -11,9 +11,18 @@ export const firearms = sqliteTable('firearms', {
   type: text('type').notNull(), // pistol, rifle, shotgun, revolver, other
   purchaseDate: text('purchase_date'),
   purchasePrice: real('purchase_price'),
+  currentValue: real('current_value'),
   notes: text('notes'),
   photoPath: text('photo_path'),
   serviceIntervalRounds: integer('service_interval_rounds'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const firearmPhotos = sqliteTable('firearm_photos', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
+  path: text('path').notNull(),
+  caption: text('caption'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
@@ -51,6 +60,17 @@ export const ammoInventory = sqliteTable('ammo_inventory', {
   type: text('type').notNull(), // FMJ, HP, SP, match, subsonic, other
   quantity: integer('quantity').notNull().default(0),
   costPerRound: real('cost_per_round'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const ammoPurchases = sqliteTable('ammo_purchases', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ammoId: integer('ammo_id').notNull().references(() => ammoInventory.id, { onDelete: 'cascade' }),
+  date: text('date').notNull(),
+  quantity: integer('quantity').notNull(),
+  totalCost: real('total_cost'),
+  source: text('source'),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });

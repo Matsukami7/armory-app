@@ -11,7 +11,8 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 
 ### Firearms
 - Add each firearm with make, model, caliber, type, serial number, purchase date and price
-- Upload a photo per firearm (JPEG, PNG, WebP, HEIC)
+- Track estimated current value separately from purchase price — dashboard shows collection value vs. what you paid
+- Upload a cover photo per firearm plus an unlimited additional photo gallery
 - Edit all fields at any time
 - View total lifetime rounds fired per firearm
 
@@ -41,7 +42,13 @@ A self-hosted firearms tracker and range log. Track your collection, document ra
 - Track ammo by caliber, brand, grain, and type (FMJ, HP, SP, Match, Subsonic)
 - Quick +50 / −50 round adjusters directly on the inventory page
 - Cost-per-round tracking
+- Purchase log per ammo type — track when you bought, how much, total cost, and retailer; automatically updates quantity
 - Dashboard warns when any ammo type drops below 100 rounds
+
+### Settings & Backup
+- One-click database download from the Settings page — no SSH required
+- Vault summary showing total firearms, sessions, and ammo types
+- Instructions for restoring from backup
 
 ### Dashboard
 - At-a-glance stats: total firearms, sessions, lifetime rounds fired, total investment, and all-time range spend (ammo cost)

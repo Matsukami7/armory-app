@@ -1,0 +1,107 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { firearms, ammoInventory, rangeSessions } from '../../db/schema';
+import { count } from 'drizzle-orm';
+import { resolve } from 'path';
+import { statSync, existsSync } from 'fs';
+
+const firearmCount = (await db.select({ c: count() }).from(firearms))[0].c;
+const ammoCount    = (await db.select({ c: count() }).from(ammoInventory))[0].c;
+const sessionCount = (await db.select({ c: count() }).from(rangeSessions))[0].c;
+
+const dbPath = process.env.DB_PATH ?? resolve(process.cwd(), 'data/armory.db');
+const dbSize = existsSync(dbPath) ? (statSync(dbPath).size / 1024).toFixed(1) : '?';
+const usingDefault = (process.env.ARMORY_PASSWORD ?? 'changeme') === 'changeme';
+---
+
+<Layout title="Settings" sub="Backup & configuration">
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:36rem">
+
+    <!-- Data overview -->
+    <div class="card" style="padding:1.5rem">
+      <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:1rem">Vault Summary</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;text-align:center">
+        <div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--text)">{firearmCount}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Firearms</div>
+        </div>
+        <div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--text)">{sessionCount}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Sessions</div>
+        </div>
+        <div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--text)">{ammoCount}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Ammo Types</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security -->
+    {usingDefault && (
+      <div class="card" style="padding:1.25rem;border-color:#f59e0b">
+        <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#f59e0b;margin-bottom:0.5rem">⚠ Default Password Active</div>
+        <p style="font-size:0.8125rem;color:var(--text-muted);line-height:1.5">
+          You are using the default password <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">changeme</code>.
+          Set <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">ARMORY_PASSWORD</code> in your
+          <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">.env</code> file before exposing this to your network.
+        </p>
+      </div>
+    )}
+
+    <!-- Backup -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◉</span>
+        <span class="section-title">Backup</span>
+      </div>
+      <div class="card" style="padding:1.5rem;display:flex;flex-direction:column;gap:1rem">
+        <div>
+          <div style="font-size:0.875rem;font-weight:600;color:var(--text);margin-bottom:0.25rem">Database</div>
+          <div style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem">
+            Download a copy of your SQLite database ({dbSize} KB). Contains all firearms, sessions, ammo, drills, and logs.
+          </div>
+          <a href="/api/backup/db" class="btn btn-primary" download>⬇ Download Database</a>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:1rem">
+          <div style="font-size:0.875rem;font-weight:600;color:var(--text);margin-bottom:0.25rem">Photos</div>
+          <div style="font-size:0.8125rem;color:var(--text-muted)">
+            Photos are stored in <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">data/uploads/</code> on the server.
+            In Docker, this is the <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">./data</code> directory next to your
+            <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">docker-compose.yml</code>.
+            Copy that entire directory to back up all photos.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Restore instructions -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">↺</span>
+        <span class="section-title">Restore</span>
+      </div>
+      <div class="card" style="padding:1.5rem">
+        <div style="font-size:0.8125rem;color:var(--text-muted);line-height:1.7">
+          <p style="margin:0 0 0.5rem">To restore from a backup:</p>
+          <ol style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.25rem">
+            <li>Stop the container: <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">docker compose down</code></li>
+            <li>Replace <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">data/armory.db</code> with your backup file</li>
+            <li>Restore <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">data/uploads/</code> if you also backed up photos</li>
+            <li>Start again: <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">docker compose up -d</code></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- About -->
+    <div class="card" style="padding:1.25rem">
+      <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem">About</div>
+      <div style="font-size:0.8125rem;color:var(--text-muted);line-height:1.6">
+        Armory — self-hosted firearms tracker.<br />
+        <a href="https://github.com/Matsukami7/armory-app" target="_blank" style="color:var(--accent)">github.com/Matsukami7/armory-app</a>
+      </div>
+    </div>
+
+  </div>
+</Layout>

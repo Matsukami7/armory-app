@@ -7,7 +7,9 @@ import { sql, sum, count, eq, and, isNotNull, desc } from 'drizzle-orm';
 const firearmCount   = (await db.select({ c: count() }).from(firearms))[0].c;
 const sessionCount   = (await db.select({ c: count() }).from(rangeSessions))[0].c;
 const totalRounds    = Number((await db.select({ s: sum(sessionFirearms.roundsFired) }).from(sessionFirearms))[0].s ?? 0);
-const totalInvest    = (await db.select().from(firearms)).reduce((s, f) => s + (f.purchasePrice ?? 0), 0);
+const allFirearmData = await db.select().from(firearms);
+const totalInvest    = allFirearmData.reduce((s, f) => s + (f.purchasePrice ?? 0), 0);
+const collectionValue = allFirearmData.reduce((s, f) => s + (f.currentValue ?? f.purchasePrice ?? 0), 0);
 const recentSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`).limit(5);
 const lowAmmo        = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
 
@@ -98,9 +100,9 @@ for (const f of firearmsWithInterval) {
 
       <div class="stat-card">
         <div>
-          <div class="stat-card-label">Total Investment</div>
-          <div class="stat-card-value" style="color:#22c55e">${totalInvest.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-          <div class="stat-card-sub">firearms + accessories</div>
+          <div class="stat-card-label">Collection Value</div>
+          <div class="stat-card-value" style="color:#22c55e">${collectionValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+          <div class="stat-card-sub">{totalInvest > 0 ? `paid $${totalInvest.toLocaleString('en-US', {maximumFractionDigits:0})}` : 'est. current value'}</div>
         </div>
         <div class="stat-card-icon" style="background:rgba(34,197,94,0.1);color:#22c55e">
           <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">

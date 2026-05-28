@@ -23,6 +23,7 @@ if (Astro.request.method === 'POST') {
     purchaseDate:  form.get('purchaseDate') as string || null,
     purchasePrice:         form.get('purchasePrice') ? parseFloat(form.get('purchasePrice') as string) : null,
     notes:                 form.get('notes') as string || null,
+    currentValue:          form.get('currentValue') ? parseFloat(form.get('currentValue') as string) : null,
     serviceIntervalRounds: form.get('serviceIntervalRounds') ? parseInt(form.get('serviceIntervalRounds') as string) : null,
   }).where(eq(firearms.id, id));
   return Astro.redirect(`/firearms/${id}`);
@@ -60,6 +61,8 @@ if (Astro.request.method === 'POST') {
       <div><label>Purchase Date</label><input name="purchaseDate" type="date" value={firearm.purchaseDate ?? ''} /></div>
       <div><label>Purchase Price ($)</label><input name="purchasePrice" type="number" step="0.01" min="0" value={firearm.purchasePrice ?? ''} /></div>
     </div>
+
+    <div><label>Estimated Current Value ($)</label><input name="currentValue" type="number" step="0.01" min="0" value={firearm.currentValue ?? ''} placeholder="Leave blank to use purchase price" /></div>
 
     <div><label>Notes</label><textarea name="notes" rows="4">{firearm.notes ?? ''}</textarea></div>
 
