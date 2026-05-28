@@ -10,7 +10,7 @@ if (isNaN(id)) return Astro.redirect('/sessions');
 const [session] = await db.select().from(rangeSessions).where(eq(rangeSessions.id, id));
 if (!session) return Astro.redirect('/sessions');
 
-const pastLocations = (await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`)).rows as { location: string }[];
+const pastLocations = await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`) as unknown as { location: string }[];
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();

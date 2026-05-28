@@ -17,7 +17,7 @@ if (Astro.request.method === 'POST') {
 }
 
 const today = new Date().toISOString().split('T')[0];
-const pastLocations = (await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`)).rows as { location: string }[];
+const pastLocations = await db.execute(sql`SELECT DISTINCT location FROM range_sessions WHERE location IS NOT NULL ORDER BY location`) as unknown as { location: string }[];
 ---
 
 <Layout title="Log Session" backHref="/sessions">
