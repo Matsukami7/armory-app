@@ -65,6 +65,7 @@ const totalRounds = all.reduce((sum, a) => sum + a.quantity, 0);
                   <input type="hidden" name="delta" value="50" />
                   <button type="submit" class="btn-secondary py-1 px-2 text-xs">+50</button>
                 </form>
+                <a href={`/ammo/${a.id}/edit`} class="btn-secondary py-1 px-2 text-xs">Edit</a>
               </div>
             </div>
           </div>

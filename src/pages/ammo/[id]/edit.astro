@@ -1,0 +1,90 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../db';
+import { ammoInventory } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
+
+const id = parseInt(Astro.params.id!);
+if (isNaN(id)) return Astro.redirect('/ammo');
+
+const [ammo] = await db.select().from(ammoInventory).where(eq(ammoInventory.id, id));
+if (!ammo) return Astro.redirect('/ammo');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'delete') {
+    await db.delete(ammoInventory).where(eq(ammoInventory.id, id));
+    return Astro.redirect('/ammo');
+  }
+
+  await db.update(ammoInventory).set({
+    caliber: form.get('caliber') as string,
+    brand: form.get('brand') as string,
+    grain: form.get('grain') ? parseInt(form.get('grain') as string) : null,
+    type: form.get('type') as string,
+    quantity: parseInt(form.get('quantity') as string) || 0,
+    costPerRound: form.get('costPerRound') ? parseFloat(form.get('costPerRound') as string) : null,
+    notes: form.get('notes') as string || null,
+  }).where(eq(ammoInventory.id, id));
+  return Astro.redirect('/ammo');
+}
+---
+
+<Layout title="Edit Ammo" backHref="/ammo" backLabel="Ammo">
+  <div class="px-4 py-5 space-y-6">
+
+    <form method="POST" class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label>Caliber *</label>
+          <input name="caliber" type="text" required value={ammo.caliber} />
+        </div>
+        <div>
+          <label>Brand *</label>
+          <input name="brand" type="text" required value={ammo.brand} />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label>Grain</label>
+          <input name="grain" type="number" min="1" value={ammo.grain ?? ''} placeholder="115" />
+        </div>
+        <div>
+          <label>Type *</label>
+          <select name="type">
+            {['FMJ','HP','SP','match','subsonic','other'].map(t => (
+              <option value={t} selected={ammo.type === t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label>Quantity *</label>
+          <input name="quantity" type="number" min="0" required value={ammo.quantity} />
+        </div>
+        <div>
+          <label>Cost/Round ($)</label>
+          <input name="costPerRound" type="number" step="0.001" min="0" value={ammo.costPerRound ?? ''} placeholder="0.000" />
+        </div>
+      </div>
+
+      <div>
+        <label>Notes</label>
+        <input name="notes" type="text" value={ammo.notes ?? ''} placeholder="Optional" />
+      </div>
+
+      <button type="submit" class="btn-primary w-full">Save Changes</button>
+    </form>
+
+    <form method="POST" onsubmit="return confirm('Delete this ammo entry?')">
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="btn-danger w-full">Delete Entry</button>
+    </form>
+
+  </div>
+</Layout>
