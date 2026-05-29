@@ -219,6 +219,7 @@ All configuration via environment variables (`.env` or `docker-compose.yml`):
 |---|---|---|
 | `ARMORY_PASSWORD` | `changeme` | App password — **change this** |
 | `DB_PATH` | `/data/armory.db` | Path to the SQLite database |
+| `ORIGIN` | *(unset)* | Public URL — **required behind a reverse proxy** (e.g. `https://armory.example.com`) |
 | `PORT` | `4321` | Port the app listens on |
 | `HOST` | `0.0.0.0` | Bind address |
 
@@ -230,7 +231,12 @@ ports:
 ```
 
 **Behind a reverse proxy (nginx, Caddy, Traefik):**
-The app runs plain HTTP — terminate TLS at your proxy and forward to `http://localhost:4321`. No special headers needed.
+The app runs plain HTTP — terminate TLS at your proxy and forward to `http://localhost:4321`. You **must** set the `ORIGIN` variable to your public URL or logins will be blocked by Astro's CSRF protection:
+
+```bash
+# .env
+ORIGIN=https://armory.yourdomain.com
+```
 
 ---
 

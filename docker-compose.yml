@@ -14,3 +14,6 @@ services:
       - DB_PATH=/data/armory.db
       # Default password is "changeme" — change this before exposing to your network
       - ARMORY_PASSWORD=${ARMORY_PASSWORD:-changeme}
+      # Set this to your public URL if accessing behind a reverse proxy (e.g. https://armory.example.com)
+      # Required to allow login when the app is behind Caddy, nginx, Traefik, etc.
+      - ORIGIN=${ORIGIN:-}
