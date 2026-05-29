@@ -1,8 +1,8 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { firearms, firearmPhotos, accessories, maintenanceLogs, sessionFirearms, magazines } from '../../db/schema';
-import { eq, sum, desc } from 'drizzle-orm';
+import { firearms, firearmPhotos, accessories, maintenanceLogs, sessionFirearms, magazines, firearmDocuments } from '../../db/schema';
+import { eq, sum, desc, sql } from 'drizzle-orm';
 import { saveUpload } from '../../lib/uploads';
 import { parseTags, serializeTags, tagColor } from '../../lib/tags';
 
@@ -145,6 +145,25 @@ if (Astro.request.method === 'POST') {
     await db.update(firearms).set({ tags: serializeTags(updated) }).where(eq(firearms.id, id));
     return Astro.redirect(`/firearms/${id}`);
   }
+  if (action === 'upload_document') {
+    const file = form.get('file') as File | null;
+    if (file && file.size > 0) {
+      const path = await saveUpload(file, 'documents');
+      if (path) {
+        await db.insert(firearmDocuments).values({
+          firearmId: id,
+          filename:  file.name,
+          path,
+          label:     form.get('label') as string || null,
+        });
+      }
+    }
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'delete_document') {
+    await db.delete(firearmDocuments).where(eq(firearmDocuments.id, parseInt(form.get('docId') as string)));
+    return Astro.redirect(`/firearms/${id}`);
+  }
 }
 
 const [gun]      = await db.select().from(firearms).where(eq(firearms.id, id));
@@ -152,6 +171,7 @@ const gallery    = await db.select().from(firearmPhotos).where(eq(firearmPhotos.
 const accs       = await db.select().from(accessories).where(eq(accessories.firearmId, id));
 const logs       = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.firearmId, id)).orderBy(desc(maintenanceLogs.date));
 const mags       = await db.select().from(magazines).where(eq(magazines.firearmId, id)).orderBy(magazines.label);
+const docs       = await db.select().from(firearmDocuments).where(eq(firearmDocuments.firearmId, id)).orderBy(desc(firearmDocuments.createdAt));
 const [rRow]     = await db.select({ total: sum(sessionFirearms.roundsFired) }).from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
 const totalRounds = Number(rRow?.total ?? 0);
 
@@ -567,6 +587,55 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
           <div><label>Notes *</label><textarea name="notes" rows="3" required placeholder="What happened, what was done..."></textarea></div>
           <div><label>Round Count at Service</label><input name="roundCount" type="number" min="0" placeholder="Optional" /></div>
           <button type="submit" class="btn btn-primary">Save Entry</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Documents -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◈</span>
+        <span class="section-title">Documents</span>
+        <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">manuals, registrations, scans</span>
+      </div>
+      <div class="card card-divide">
+        {docs.map(doc => {
+          const ext = doc.filename.slice(doc.filename.lastIndexOf('.')).toLowerCase();
+          const isPdf = ext === '.pdf';
+          const icon = isPdf ? '📄' : ext === '.txt' ? '📝' : '📎';
+          return (
+            <div class="list-row">
+              <span style="font-size:1rem;flex-shrink:0">{icon}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                  {doc.label || doc.filename}
+                </div>
+                {doc.label && <div style="font-size:0.7rem;color:var(--text-muted)">{doc.filename}</div>}
+              </div>
+              <a href={doc.path} target="_blank" class="btn btn-secondary" style="font-size:0.7rem;padding:0.25rem 0.625rem">
+                {isPdf ? 'View' : 'Download'}
+              </a>
+              <form method="POST" onsubmit="return confirm('Delete this document?')">
+                <input type="hidden" name="_action" value="delete_document" />
+                <input type="hidden" name="docId" value={doc.id} />
+                <button type="submit" class="btn-delete">✕</button>
+              </form>
+            </div>
+          );
+        })}
+        {docs.length === 0 && (
+          <div class="list-row" style="color:var(--text-muted);font-size:0.8rem;justify-content:center">No documents uploaded</div>
+        )}
+      </div>
+      <details class="accordion" style="margin-top:0.5rem">
+        <summary>+ Upload Document</summary>
+        <form method="POST" enctype="multipart/form-data" class="form-section">
+          <input type="hidden" name="_action" value="upload_document" />
+          <div class="form-row form-row-2">
+            <div><label>File *</label><input name="file" type="file" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" required /></div>
+            <div><label>Label / Description</label><input name="label" type="text" placeholder="e.g. Owners Manual, Bill of Sale" /></div>
+          </div>
+          <button type="submit" class="btn btn-primary">Upload</button>
         </form>
       </details>
     </div>

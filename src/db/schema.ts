@@ -133,6 +133,15 @@ export const footage = sqliteTable('footage', {
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
+export const firearmDocuments = sqliteTable('firearm_documents', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
+  filename: text('filename').notNull(),
+  path: text('path').notNull(),
+  label: text('label'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
 export const drills = sqliteTable('drills', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   sessionId: integer('session_id').notNull().references(() => rangeSessions.id, { onDelete: 'cascade' }),

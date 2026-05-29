@@ -14,9 +14,14 @@ const MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.webm': 'video/webm',
   '.mkv': 'video/x-matroska',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain',
 };
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm', '.mkv']);
+const INLINE_EXTS = new Set(['.pdf', '.txt']);
 
 export const GET: APIRoute = ({ params, request }) => {
   const rawPath = params.path ?? '';
@@ -81,11 +86,12 @@ export const GET: APIRoute = ({ params, request }) => {
     });
   }
 
-  // Images — load into memory
   const data = readFileSync(requested);
+  const disposition = INLINE_EXTS.has(ext) ? 'inline' : 'attachment; filename="' + requested.split('/').pop() + '"';
   return new Response(data, {
     headers: {
       'Content-Type': contentType,
+      'Content-Disposition': disposition,
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });
