@@ -1,6 +1,6 @@
 # Armory
 
-A self-hosted firearms tracker and range log. Track your collection, log range sessions, manage ammo, and review footage — all stored locally on your own hardware with no cloud dependency.
+A self-hosted firearms tracker and range log. Track your collection, log range sessions, manage ammo, and review footage — all stored locally on your own hardware with no cloud dependencies.
 
 - **Image:** `ghcr.io/matsukami7/armory-app:latest`
 - **GitHub:** https://github.com/Matsukami7/armory-app
