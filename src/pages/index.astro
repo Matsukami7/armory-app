@@ -11,7 +11,7 @@ const allFirearmData = await db.select().from(firearms);
 const totalInvest    = allFirearmData.reduce((s, f) => s + (f.purchasePrice ?? 0), 0);
 const collectionValue = allFirearmData.reduce((s, f) => s + (f.currentValue ?? f.purchasePrice ?? 0), 0);
 const recentSessions = await db.select().from(rangeSessions).orderBy(sql`date DESC`).limit(5);
-const lowAmmo        = await db.select().from(ammoInventory).where(sql`quantity < 100`).orderBy(sql`quantity ASC`).limit(5);
+const lowAmmo        = await db.select().from(ammoInventory).where(sql`low_stock_threshold > 0 AND quantity <= low_stock_threshold`).orderBy(sql`quantity ASC`);
 const lowGear        = await db.select().from(gear).where(sql`low_stock_threshold > 0 AND quantity <= low_stock_threshold`).orderBy(sql`name ASC`);
 
 // Range spend: sum of rounds_fired * cost_per_round for all sessions with ammo linked

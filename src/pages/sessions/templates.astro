@@ -1,0 +1,173 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { sessionTemplates, sessionTemplateFirearms, firearms, ammoInventory } from '../../db/schema';
+import { eq } from 'drizzle-orm';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'create') {
+    const [tmpl] = await db.insert(sessionTemplates).values({
+      name:     form.get('name') as string,
+      location: form.get('location') as string || null,
+      notes:    form.get('notes') as string || null,
+    }).returning({ id: sessionTemplates.id });
+
+    const firearmIds = form.getAll('firearmId').map(Number).filter(Boolean);
+    const ammoIds    = form.getAll('ammoId').map(v => parseInt(v as string) || null);
+    for (let i = 0; i < firearmIds.length; i++) {
+      await db.insert(sessionTemplateFirearms).values({
+        templateId: tmpl.id,
+        firearmId:  firearmIds[i],
+        ammoId:     ammoIds[i] ?? null,
+      });
+    }
+    return Astro.redirect('/sessions/templates');
+  }
+
+  if (action === 'delete') {
+    await db.delete(sessionTemplates).where(eq(sessionTemplates.id, parseInt(form.get('templateId') as string)));
+    return Astro.redirect('/sessions/templates');
+  }
+}
+
+const allFirearms = await db.select().from(firearms).where(eq(firearms.status, 'active')).orderBy(firearms.name);
+const allAmmo     = await db.select().from(ammoInventory).orderBy(ammoInventory.caliber);
+const templates   = await db.select().from(sessionTemplates).orderBy(sessionTemplates.name);
+
+const templateRows = await Promise.all(templates.map(async t => {
+  const guns = await db
+    .select({ firearmId: sessionTemplateFirearms.firearmId, ammoId: sessionTemplateFirearms.ammoId,
+              firearmName: firearms.name, caliber: firearms.caliber,
+              ammoBrand: ammoInventory.brand, ammoGrain: ammoInventory.grain })
+    .from(sessionTemplateFirearms)
+    .leftJoin(firearms, eq(sessionTemplateFirearms.firearmId, firearms.id))
+    .leftJoin(ammoInventory, eq(sessionTemplateFirearms.ammoId, ammoInventory.id))
+    .where(eq(sessionTemplateFirearms.templateId, t.id));
+  return { ...t, guns };
+}));
+---
+
+<Layout title="Session Templates" sub="Saved loadouts" backHref="/sessions">
+  <slot name="actions" slot="actions">
+    <a href="/sessions/new" class="btn btn-secondary">+ New Session</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:48rem">
+
+    <!-- Existing templates -->
+    {templateRows.length > 0 && (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◈</span>
+          <span class="section-title">Saved Templates</span>
+        </div>
+        <div class="card card-divide">
+          {templateRows.map(t => (
+            <div class="list-row" style="flex-direction:column;align-items:stretch;gap:0.5rem">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-size:0.9rem;font-weight:700;color:var(--text)">{t.name}</div>
+                  {t.location && <div style="font-size:0.72rem;color:var(--text-muted)">{t.location}</div>}
+                </div>
+                <div style="display:flex;gap:0.5rem;align-items:center">
+                  <a href={`/sessions/new?template=${t.id}`} class="btn btn-primary" style="font-size:0.72rem;padding:0.25rem 0.75rem">Use Template</a>
+                  <form method="POST" onsubmit="return confirm('Delete this template?')">
+                    <input type="hidden" name="_action" value="delete" />
+                    <input type="hidden" name="templateId" value={t.id} />
+                    <button type="submit" class="btn-delete">✕</button>
+                  </form>
+                </div>
+              </div>
+              {t.guns.length > 0 && (
+                <div style="display:flex;flex-wrap:wrap;gap:0.375rem">
+                  {t.guns.map(g => (
+                    <span class="pill pill-default" style="font-size:0.7rem">
+                      {g.firearmName}
+                      {g.ammoBrand && <span style="opacity:0.65"> · {g.ammoBrand}{g.ammoGrain ? ` ${g.ammoGrain}gr` : ''}</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <!-- Create template -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">+</span>
+        <span class="section-title">New Template</span>
+      </div>
+      <form method="POST" class="card" style="padding:1.5rem">
+        <input type="hidden" name="_action" value="create" />
+        <div class="form-section">
+          <div class="form-row form-row-2">
+            <div><label>Template Name *</label><input name="name" type="text" required placeholder="e.g. Monday Night Drills" /></div>
+            <div><label>Default Location</label><input name="location" type="text" placeholder="Optional" /></div>
+          </div>
+
+          <div>
+            <label>Firearms & Ammo</label>
+            <div id="firearm-rows" style="display:flex;flex-direction:column;gap:0.625rem;margin-top:0.375rem">
+              <div class="firearm-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.5rem;align-items:center">
+                <select name="firearmId">
+                  <option value="">— Select Firearm —</option>
+                  {allFirearms.map(f => <option value={f.id}>{f.name} ({f.caliber})</option>)}
+                </select>
+                <select name="ammoId">
+                  <option value="">— Ammo (optional) —</option>
+                  {allAmmo.map(a => <option value={a.id}>{a.brand} {a.grain ? `${a.grain}gr ` : ''}{a.caliber} {a.type}</option>)}
+                </select>
+                <button type="button" class="btn-delete remove-row" style="visibility:hidden">✕</button>
+              </div>
+            </div>
+            <button type="button" id="add-firearm-row" class="btn btn-secondary" style="margin-top:0.5rem;font-size:0.75rem">+ Add Firearm</button>
+          </div>
+
+          <div><label>Notes</label><textarea name="notes" rows="2" placeholder="Optional"></textarea></div>
+          <button type="submit" class="btn btn-primary">Save Template</button>
+        </div>
+      </form>
+    </div>
+
+    {templateRows.length === 0 && allFirearms.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-text">Add firearms first, then create templates.</div>
+      </div>
+    )}
+  </div>
+</Layout>
+
+<script>
+const container = document.getElementById('firearm-rows')!;
+const addBtn    = document.getElementById('add-firearm-row')!;
+const firstRow  = container.querySelector('.firearm-row') as HTMLElement;
+
+function updateRemoveButtons() {
+  container.querySelectorAll<HTMLButtonElement>('.remove-row').forEach((btn, i) => {
+    btn.style.visibility = container.children.length > 1 ? 'visible' : 'hidden';
+  });
+}
+
+addBtn.addEventListener('click', () => {
+  const clone = firstRow.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('select').forEach(s => (s as HTMLSelectElement).selectedIndex = 0);
+  clone.querySelector<HTMLButtonElement>('.remove-row')!.style.visibility = 'visible';
+  container.appendChild(clone);
+  updateRemoveButtons();
+});
+
+container.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest('.remove-row');
+  if (btn && container.children.length > 1) {
+    btn.closest('.firearm-row')!.remove();
+    updateRemoveButtons();
+  }
+});
+</script>

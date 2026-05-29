@@ -5,19 +5,25 @@ import { firearms } from '../../db/schema';
 import { sql } from 'drizzle-orm';
 import { parseTags, tagColor } from '../../lib/tags';
 
-const typeFilter = Astro.url.searchParams.get('type') ?? 'all';
-const tagFilter  = Astro.url.searchParams.get('tag') ?? '';
-const all = await db.select().from(firearms).orderBy(sql`created_at DESC`);
+const typeFilter     = Astro.url.searchParams.get('type') ?? 'all';
+const tagFilter      = Astro.url.searchParams.get('tag') ?? '';
+const showTransferred = Astro.url.searchParams.get('show') === 'all';
 
-const filtered = all
+const all = await db.select().from(firearms).orderBy(sql`created_at DESC`);
+const active = all.filter(f => f.status === 'active');
+const displayBase = showTransferred ? all : active;
+
+const filtered = displayBase
   .filter(f => typeFilter === 'all' || f.type === typeFilter)
   .filter(f => !tagFilter || parseTags(f.tags).includes(tagFilter));
 
-const counts: Record<string, number> = { all: all.length };
-for (const f of all) counts[f.type] = (counts[f.type] ?? 0) + 1;
+const counts: Record<string, number> = { all: displayBase.length };
+for (const f of displayBase) counts[f.type] = (counts[f.type] ?? 0) + 1;
 
-// Collect all unique tags across all firearms
-const allTags = [...new Set(all.flatMap(f => parseTags(f.tags)))].sort();
+const transferredCount = all.filter(f => f.status !== 'active').length;
+
+// Collect all unique tags across displayed firearms
+const allTags = [...new Set(displayBase.flatMap(f => parseTags(f.tags)))].sort();
 
 const types = ['pistol', 'rifle', 'shotgun', 'revolver', 'other'];
 const typeLabel: Record<string, string> = {
@@ -32,8 +38,13 @@ const typeIcon: Record<string, string> = {
 };
 ---
 
-<Layout title="Vault" sub={`${all.length} firearm${all.length !== 1 ? 's' : ''} in inventory`}>
+<Layout title="Vault" sub={`${active.length} active · ${transferredCount > 0 ? `${transferredCount} transferred/sold` : 'none transferred'}`}>
   <slot name="actions" slot="actions">
+    {transferredCount > 0 && (
+      <a href={showTransferred ? '/firearms' : '/firearms?show=all'} class="btn btn-secondary" style="font-size:0.75rem">
+        {showTransferred ? 'Hide Transferred' : `Show Transferred (${transferredCount})`}
+      </a>
+    )}
     <a href="/firearms/new" class="btn btn-primary">+ Add Firearm</a>
   </slot>
 

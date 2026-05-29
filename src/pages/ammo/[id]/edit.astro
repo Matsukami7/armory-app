@@ -45,13 +45,14 @@ if (Astro.request.method === 'POST') {
   }
 
   await db.update(ammoInventory).set({
-    caliber:      form.get('caliber') as string,
-    brand:        form.get('brand') as string,
-    grain:        form.get('grain') ? parseInt(form.get('grain') as string) : null,
-    type:         form.get('type') as string,
-    quantity:     parseInt(form.get('quantity') as string) || 0,
-    costPerRound: form.get('costPerRound') ? parseFloat(form.get('costPerRound') as string) : null,
-    notes:        form.get('notes') as string || null,
+    caliber:           form.get('caliber') as string,
+    brand:             form.get('brand') as string,
+    grain:             form.get('grain') ? parseInt(form.get('grain') as string) : null,
+    type:              form.get('type') as string,
+    quantity:          parseInt(form.get('quantity') as string) || 0,
+    costPerRound:      form.get('costPerRound') ? parseFloat(form.get('costPerRound') as string) : null,
+    lowStockThreshold: form.get('lowStockThreshold') ? parseInt(form.get('lowStockThreshold') as string) : 0,
+    notes:             form.get('notes') as string || null,
   }).where(eq(ammoInventory.id, id));
   return Astro.redirect('/ammo');
 }
@@ -98,7 +99,10 @@ const pricePoints = [...purchases].reverse().flatMap(p =>
             <div><label>Quantity *</label><input name="quantity" type="number" min="0" required value={ammo.quantity} /></div>
             <div><label>Cost / Round ($)</label><input name="costPerRound" type="number" step="0.001" min="0" value={ammo.costPerRound ?? ''} placeholder="0.000" /></div>
           </div>
-          <div><label>Notes</label><input name="notes" type="text" value={ammo.notes ?? ''} placeholder="Optional" /></div>
+          <div class="form-row form-row-2">
+            <div><label>Low Stock Alert (rounds)</label><input name="lowStockThreshold" type="number" min="0" value={ammo.lowStockThreshold ?? 0} placeholder="0 = disabled" /></div>
+            <div><label>Notes</label><input name="notes" type="text" value={ammo.notes ?? ''} placeholder="Optional" /></div>
+          </div>
           <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
         </div>
       </form>

@@ -145,6 +145,20 @@ if (Astro.request.method === 'POST') {
     await db.update(firearms).set({ tags: serializeTags(updated) }).where(eq(firearms.id, id));
     return Astro.redirect(`/firearms/${id}`);
   }
+  if (action === 'transfer') {
+    await db.update(firearms).set({
+      status:        form.get('status') as string,
+      transferDate:  form.get('transferDate') as string || null,
+      transferTo:    form.get('transferTo') as string || null,
+      transferPrice: form.get('transferPrice') ? parseFloat(form.get('transferPrice') as string) : null,
+      transferNotes: form.get('transferNotes') as string || null,
+    }).where(eq(firearms.id, id));
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'reactivate') {
+    await db.update(firearms).set({ status: 'active', transferDate: null, transferTo: null, transferPrice: null, transferNotes: null }).where(eq(firearms.id, id));
+    return Astro.redirect(`/firearms/${id}`);
+  }
   if (action === 'upload_document') {
     const file = form.get('file') as File | null;
     if (file && file.size > 0) {
@@ -638,6 +652,56 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
           <button type="submit" class="btn btn-primary">Upload</button>
         </form>
       </details>
+    </div>
+
+    <!-- Transfer / Sell -->
+    <div>
+      <div class="section-header">
+        <span style={`color:${gun.status !== 'active' ? '#f59e0b' : 'var(--text-dim)'};font-size:0.75rem`}>⇄</span>
+        <span class="section-title">Transfer / Sale</span>
+        {gun.status !== 'active' && (
+          <span class="pill" style={`margin-left:0.5rem;background:${gun.status === 'sold' ? '#f87171' : '#f59e0b'}22;color:${gun.status === 'sold' ? '#f87171' : '#f59e0b'};border-color:${gun.status === 'sold' ? '#f87171' : '#f59e0b'}44`}>
+            {gun.status === 'sold' ? 'Sold' : 'Transferred'}
+          </span>
+        )}
+      </div>
+      {gun.status !== 'active' ? (
+        <div class="card" style="padding:1.25rem;display:flex;flex-direction:column;gap:0.5rem">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.8125rem">
+            <div><span style="color:var(--text-muted);font-size:0.7rem">Date</span><div style="color:var(--text);font-weight:600">{gun.transferDate ?? '—'}</div></div>
+            <div><span style="color:var(--text-muted);font-size:0.7rem">{gun.status === 'sold' ? 'Sold To' : 'Transferred To'}</span><div style="color:var(--text);font-weight:600">{gun.transferTo ?? '—'}</div></div>
+            {gun.transferPrice && <div><span style="color:var(--text-muted);font-size:0.7rem">Price</span><div style="color:#22c55e;font-weight:700">${gun.transferPrice.toFixed(2)}</div></div>}
+            {gun.transferNotes && <div style="grid-column:1/-1"><span style="color:var(--text-muted);font-size:0.7rem">Notes</span><div style="color:var(--text)">{gun.transferNotes}</div></div>}
+          </div>
+          <form method="POST" style="margin-top:0.5rem">
+            <input type="hidden" name="_action" value="reactivate" />
+            <button type="submit" class="btn btn-secondary" style="font-size:0.75rem">Mark Active Again</button>
+          </form>
+        </div>
+      ) : (
+        <details class="accordion">
+          <summary>Record Transfer or Sale</summary>
+          <form method="POST" class="form-section">
+            <input type="hidden" name="_action" value="transfer" />
+            <div class="form-row form-row-2">
+              <div>
+                <label>Type *</label>
+                <select name="status">
+                  <option value="sold">Sold</option>
+                  <option value="transferred">Transferred (Gift / Trade)</option>
+                </select>
+              </div>
+              <div><label>Date</label><input name="transferDate" type="date" /></div>
+            </div>
+            <div class="form-row form-row-2">
+              <div><label>To (Name / FFL / Buyer)</label><input name="transferTo" type="text" placeholder="Optional" /></div>
+              <div><label>Sale Price ($)</label><input name="transferPrice" type="number" step="0.01" min="0" placeholder="Optional" /></div>
+            </div>
+            <div><label>Notes</label><input name="transferNotes" type="text" placeholder="Optional" /></div>
+            <button type="submit" class="btn btn-secondary" onclick="return confirm('Mark this firearm as sold/transferred? It will be hidden from the active vault.')">Record Transfer</button>
+          </form>
+        </details>
+      )}
     </div>
 
     <!-- Delete -->

@@ -156,6 +156,21 @@ sqlite.exec(`
     target_photo_path TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS session_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    location TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS session_template_firearms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL REFERENCES session_templates(id) ON DELETE CASCADE,
+    firearm_id INTEGER NOT NULL REFERENCES firearms(id) ON DELETE CASCADE,
+    ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL
+  );
 `);
 
 // Column migrations for existing databases — safe to run on every startup
@@ -164,6 +179,14 @@ if (!firearmColumns.includes('generation'))              sqlite.exec("ALTER TABL
 if (!firearmColumns.includes('service_interval_rounds')) sqlite.exec("ALTER TABLE firearms ADD COLUMN service_interval_rounds INTEGER");
 if (!firearmColumns.includes('current_value'))           sqlite.exec("ALTER TABLE firearms ADD COLUMN current_value REAL");
 if (!firearmColumns.includes('tags'))                    sqlite.exec("ALTER TABLE firearms ADD COLUMN tags TEXT");
+if (!firearmColumns.includes('status'))                  sqlite.exec("ALTER TABLE firearms ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+if (!firearmColumns.includes('transfer_date'))           sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_date TEXT");
+if (!firearmColumns.includes('transfer_to'))             sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_to TEXT");
+if (!firearmColumns.includes('transfer_price'))          sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_price REAL");
+if (!firearmColumns.includes('transfer_notes'))          sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_notes TEXT");
+
+const ammoColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('ammo_inventory')").all() as { name: string }[]).map(r => r.name);
+if (!ammoColumns.includes('low_stock_threshold'))        sqlite.exec("ALTER TABLE ammo_inventory ADD COLUMN low_stock_threshold INTEGER NOT NULL DEFAULT 0");
 
 const sessionColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('range_sessions')").all() as { name: string }[]).map(r => r.name);
 if (!sessionColumns.includes('tags'))                    sqlite.exec("ALTER TABLE range_sessions ADD COLUMN tags TEXT");

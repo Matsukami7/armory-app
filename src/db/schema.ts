@@ -16,6 +16,11 @@ export const firearms = sqliteTable('firearms', {
   photoPath: text('photo_path'),
   serviceIntervalRounds: integer('service_interval_rounds'),
   tags: text('tags'), // comma-separated tag list
+  status: text('status').notNull().default('active'), // active | sold | transferred
+  transferDate: text('transfer_date'),
+  transferTo: text('transfer_to'),
+  transferPrice: real('transfer_price'),
+  transferNotes: text('transfer_notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
@@ -64,6 +69,7 @@ export const ammoInventory = sqliteTable('ammo_inventory', {
   type: text('type').notNull(), // FMJ, HP, SP, match, subsonic, other
   quantity: integer('quantity').notNull().default(0),
   costPerRound: real('cost_per_round'),
+  lowStockThreshold: integer('low_stock_threshold').notNull().default(0),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
@@ -153,4 +159,19 @@ export const drills = sqliteTable('drills', {
   notes: text('notes'),
   targetPhotoPath: text('target_photo_path'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const sessionTemplates = sqliteTable('session_templates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  location: text('location'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const sessionTemplateFirearms = sqliteTable('session_template_firearms', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  templateId: integer('template_id').notNull().references(() => sessionTemplates.id, { onDelete: 'cascade' }),
+  firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
+  ammoId: integer('ammo_id').references(() => ammoInventory.id, { onDelete: 'set null' }),
 });
