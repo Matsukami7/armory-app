@@ -7,6 +7,14 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 
 ---
 
+## Screenshots
+
+| Dashboard | Firearm Detail | Ammo Inventory |
+|---|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Firearm Detail](docs/screenshots/firearm-detail.png) | ![Ammo](docs/screenshots/ammo.png) |
+
+---
+
 ## Features
 
 ### Dashboard
