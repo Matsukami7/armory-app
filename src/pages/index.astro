@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
 import { firearms, rangeSessions, ammoInventory, sessionFirearms, maintenanceLogs, gear } from '../db/schema';
-import { sql, sum, count, eq, and, isNotNull, desc } from 'drizzle-orm';
+import { sql, sum, count, eq, and, isNotNull, or, desc } from 'drizzle-orm';
 
 const firearmCount   = (await db.select({ c: count() }).from(firearms))[0].c;
 const sessionCount   = (await db.select({ c: count() }).from(rangeSessions))[0].c;
@@ -22,10 +22,13 @@ const spendRows = await db
   .where(isNotNull(sessionFirearms.ammoId));
 const rangeSpend = spendRows.reduce((s, r) => s + r.rounds * (r.cpr ?? 0), 0);
 
-// Maintenance due: firearms with a service interval set
-const firearmsWithInterval = await db.select().from(firearms).where(isNotNull(firearms.serviceIntervalRounds));
-const maintenanceDue: { firearm: typeof firearmsWithInterval[0], roundsSince: number, interval: number }[] = [];
+// Maintenance due: firearms with any service interval set
+const firearmsWithInterval = await db.select().from(firearms).where(
+  and(eq(firearms.status, 'active'), or(isNotNull(firearms.serviceIntervalRounds), isNotNull(firearms.cleanIntervalDays)))
+);
+const maintenanceDue: { firearm: typeof firearmsWithInterval[0], roundsSince: number, daysSince: number, reason: string }[] = [];
 
+const todayMs = Date.now();
 for (const f of firearmsWithInterval) {
   const [roundRow] = await db
     .select({ total: sum(sessionFirearms.roundsFired) })
@@ -41,8 +44,20 @@ for (const f of firearmsWithInterval) {
     .limit(1);
 
   const roundsSince = total - (lastCleaning?.roundCount ?? 0);
-  if (roundsSince >= f.serviceIntervalRounds!) {
-    maintenanceDue.push({ firearm: f, roundsSince, interval: f.serviceIntervalRounds! });
+  const daysSince = lastCleaning?.date
+    ? Math.floor((todayMs - new Date(lastCleaning.date).getTime()) / 86_400_000)
+    : Infinity;
+
+  const roundsDue = f.serviceIntervalRounds != null && roundsSince >= f.serviceIntervalRounds;
+  const daysDue   = f.cleanIntervalDays != null && daysSince !== Infinity && daysSince >= f.cleanIntervalDays;
+  const neverCleaned = f.cleanIntervalDays != null && daysSince === Infinity;
+
+  if (roundsDue || daysDue || neverCleaned) {
+    const reasons: string[] = [];
+    if (roundsDue) reasons.push(`${(roundsSince - f.serviceIntervalRounds!).toLocaleString()} rds overdue`);
+    if (daysDue)   reasons.push(`${daysSince - f.cleanIntervalDays!}d overdue`);
+    if (neverCleaned) reasons.push('never cleaned');
+    maintenanceDue.push({ firearm: f, roundsSince, daysSince: daysSince === Infinity ? -1 : daysSince, reason: reasons.join(' · ') });
   }
 }
 ---
@@ -144,13 +159,16 @@ for (const f of firearmsWithInterval) {
         </div>
       ) : (
         <div class="card card-divide">
-          {maintenanceDue.map(({ firearm, roundsSince, interval }) => (
+          {maintenanceDue.map(({ firearm, roundsSince, daysSince, reason }) => (
             <a href={`/firearms/${firearm.id}`} class="list-row list-row-link" style="justify-content:space-between">
               <div>
                 <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{firearm.name}</div>
-                <div style="font-size:0.75rem;color:var(--text-muted)">{roundsSince.toLocaleString()} rds since last cleaning · interval {interval.toLocaleString()} rds</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">
+                  {roundsSince > 0 ? `${roundsSince.toLocaleString()} rds` : '0 rds'} since cleaning
+                  {daysSince >= 0 ? ` · ${daysSince}d ago` : ''}
+                </div>
               </div>
-              <span style="font-size:0.75rem;font-weight:700;color:#ef4444;white-space:nowrap">{(roundsSince - interval).toLocaleString()} overdue</span>
+              <span style="font-size:0.72rem;font-weight:700;color:#ef4444;white-space:nowrap;text-align:right">{reason}</span>
             </a>
           ))}
         </div>

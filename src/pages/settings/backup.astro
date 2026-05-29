@@ -1,0 +1,181 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { loadConfig, saveConfig } from '../../lib/backup';
+import type { BackupDestination } from '../../lib/backup';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'add_local') {
+    const cfg = loadConfig();
+    cfg.destinations.push({ type: 'local', path: form.get('path') as string });
+    saveConfig(cfg);
+    return Astro.redirect('/settings/backup');
+  }
+
+  if (action === 'add_s3') {
+    const cfg = loadConfig();
+    const dest: BackupDestination = {
+      type: 's3',
+      region: form.get('region') as string || 'auto',
+      bucket: form.get('bucket') as string,
+      prefix: form.get('prefix') as string || 'armory',
+      accessKeyId: form.get('accessKeyId') as string,
+      secretAccessKey: form.get('secretAccessKey') as string,
+    };
+    const endpoint = form.get('endpoint') as string;
+    if (endpoint) (dest as any).endpoint = endpoint;
+    cfg.destinations.push(dest);
+    saveConfig(cfg);
+    return Astro.redirect('/settings/backup');
+  }
+
+  if (action === 'remove') {
+    const idx = parseInt(form.get('index') as string);
+    const cfg = loadConfig();
+    cfg.destinations.splice(idx, 1);
+    saveConfig(cfg);
+    return Astro.redirect('/settings/backup');
+  }
+}
+
+const cfg = loadConfig();
+---
+
+<Layout title="Backup Destinations" sub="Configure where backups are sent" backHref="/settings">
+
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:44rem">
+
+    <!-- Backup Now -->
+    <div class="card" style="padding:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:0.875rem;font-weight:600;color:var(--text)">Run Backup Now</div>
+        <div style="font-size:0.75rem;color:var(--text-muted)">Sends the current database to all configured destinations.</div>
+      </div>
+      <button id="backup-btn" class="btn btn-primary" {cfg.destinations.length === 0 ? 'disabled' : ''}>
+        Backup Now
+      </button>
+    </div>
+    <div id="backup-result" style="display:none;font-size:0.8rem;padding:0.75rem 1rem;border-radius:0.5rem"></div>
+
+    <!-- Existing destinations -->
+    {cfg.destinations.length > 0 && (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◈</span>
+          <span class="section-title">Configured Destinations</span>
+        </div>
+        <div class="card card-divide">
+          {cfg.destinations.map((d, i) => (
+            <div class="list-row" style="justify-content:space-between">
+              <div>
+                {d.type === 'local' && (
+                  <>
+                    <span class="pill pill-default" style="font-size:0.65rem;margin-right:0.5rem">LOCAL</span>
+                    <span style="font-size:0.8125rem;color:var(--text);font-family:ui-monospace,monospace">{d.path}</span>
+                  </>
+                )}
+                {d.type === 's3' && (
+                  <>
+                    <span class="pill pill-accent" style="font-size:0.65rem;margin-right:0.5rem">
+                      {d.endpoint?.includes('r2.cloudflarestorage') ? 'R2' : 'S3'}
+                    </span>
+                    <span style="font-size:0.8125rem;color:var(--text)">{d.bucket}/{d.prefix}</span>
+                    {d.endpoint && <div style="font-size:0.7rem;color:var(--text-muted)">{d.endpoint}</div>}
+                  </>
+                )}
+              </div>
+              <form method="POST" onsubmit="return confirm('Remove this destination?')">
+                <input type="hidden" name="_action" value="remove" />
+                <input type="hidden" name="index" value={i} />
+                <button type="submit" class="btn-delete">✕</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <!-- Add local -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">+</span>
+        <span class="section-title">Add Local Path</span>
+      </div>
+      <form method="POST" class="card" style="padding:1.25rem">
+        <input type="hidden" name="_action" value="add_local" />
+        <div class="form-section">
+          <div><label>Directory Path *</label><input name="path" type="text" required placeholder="/mnt/nas/armory-backups" /></div>
+          <p style="font-size:0.72rem;color:var(--text-muted)">Must be accessible from inside the container. Mount the path as a volume in docker-compose.yml.</p>
+          <button type="submit" class="btn btn-secondary">Add Local Path</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Add S3 / R2 -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">+</span>
+        <span class="section-title">Add S3 / R2 / Compatible</span>
+      </div>
+      <form method="POST" class="card" style="padding:1.25rem">
+        <input type="hidden" name="_action" value="add_s3" />
+        <div class="form-section">
+          <div><label>Endpoint URL <span style="color:var(--text-dim);font-size:0.7rem">(leave blank for AWS S3)</span></label>
+            <input name="endpoint" type="text" placeholder="https://&lt;account&gt;.r2.cloudflarestorage.com" />
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Bucket *</label><input name="bucket" type="text" required placeholder="my-armory-backups" /></div>
+            <div><label>Region</label><input name="region" type="text" placeholder="auto  (R2) or us-east-1 (S3)" /></div>
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Access Key ID *</label><input name="accessKeyId" type="text" required placeholder="" /></div>
+            <div><label>Secret Access Key *</label><input name="secretAccessKey" type="password" required placeholder="" /></div>
+          </div>
+          <div><label>Key Prefix</label><input name="prefix" type="text" placeholder="armory" value="armory" /></div>
+          <p style="font-size:0.72rem;color:var(--text-muted)">
+            Works with <strong>Cloudflare R2</strong>, <strong>AWS S3</strong>, <strong>Backblaze B2</strong>, and any S3-compatible storage.
+            Credentials are stored in <code>data/backup-config.json</code> on the server.
+          </p>
+          <button type="submit" class="btn btn-secondary">Add S3 Destination</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</Layout>
+
+<script>
+const btn = document.getElementById('backup-btn') as HTMLButtonElement;
+const result = document.getElementById('backup-result')!;
+
+btn?.addEventListener('click', async () => {
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  result.style.display = 'none';
+  try {
+    const res = await fetch('/api/backup/run', { method: 'POST' });
+    const data = await res.json();
+    result.style.display = 'block';
+    if (data.ok) {
+      result.style.background = 'rgba(34,197,94,0.1)';
+      result.style.border = '1px solid rgba(34,197,94,0.3)';
+      result.style.color = '#22c55e';
+      result.innerHTML = '✓ Backup successful<br>' + data.results.map((r: any) => `<span style="opacity:0.7">${r.dest}</span>`).join('<br>');
+    } else {
+      result.style.background = 'rgba(239,68,68,0.1)';
+      result.style.border = '1px solid rgba(239,68,68,0.3)';
+      result.style.color = '#f87171';
+      result.innerHTML = data.results.map((r: any) => `${r.ok ? '✓' : '✗'} ${r.dest}${r.error ? `: ${r.error}` : ''}`).join('<br>');
+    }
+  } catch (e: any) {
+    result.style.display = 'block';
+    result.style.color = '#f87171';
+    result.textContent = 'Backup failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Backup Now';
+  }
+});
+</script>

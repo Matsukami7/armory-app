@@ -192,6 +192,17 @@ const totalRounds = Number(rRow?.total ?? 0);
 const gunTags = parseTags(gun.tags);
 const typeLabel: Record<string, string> = { pistol:'Pistol', rifle:'Rifle', shotgun:'Shotgun', revolver:'Revolver', other:'Other' };
 const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', inspection:'🔍', modification:'⚙️', note:'📝' };
+
+// Cleaning status
+const lastCleaning = logs.find(l => l.type === 'cleaning') ?? null;
+const roundsSinceClean = totalRounds - (lastCleaning?.roundCount ?? 0);
+const daysSinceClean = lastCleaning?.date
+  ? Math.floor((Date.now() - new Date(lastCleaning.date).getTime()) / 86_400_000)
+  : null;
+const cleanDueByRounds = gun.serviceIntervalRounds != null && roundsSinceClean >= gun.serviceIntervalRounds;
+const cleanDueByDays   = gun.cleanIntervalDays != null && (daysSinceClean == null || daysSinceClean >= gun.cleanIntervalDays);
+const cleaningDue = cleanDueByRounds || cleanDueByDays;
+const hasCleaningInterval = gun.serviceIntervalRounds != null || gun.cleanIntervalDays != null;
 ---
 
 <Layout title={gun.name} sub={`${gun.make} ${gun.model}${gun.generation ? ` ${gun.generation}` : ''} · ${gun.caliber}`} backHref="/firearms">
@@ -232,6 +243,33 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
             <div class="stat-card-sub">lifetime total</div>
           </div>
         </div>
+        {hasCleaningInterval && (
+          <div class="stat-card" style={`flex:1;${cleaningDue ? 'border-color:#ef444466' : ''}`}>
+            <div style="width:100%">
+              <div class="stat-card-label" style={cleaningDue ? 'color:#ef4444' : ''}>
+                {cleaningDue ? '⚠ Cleaning Due' : 'Cleaning Status'}
+              </div>
+              <div style="font-size:0.8rem;color:var(--text);margin-top:0.25rem;display:flex;flex-direction:column;gap:0.15rem">
+                {lastCleaning ? (
+                  <>
+                    <span style="color:var(--text-muted);font-size:0.72rem">Last: {lastCleaning.date}{daysSinceClean != null ? ` (${daysSinceClean}d ago)` : ''}</span>
+                    <span style={`font-weight:600;font-size:0.85rem;color:${cleanDueByRounds ? '#ef4444' : 'var(--text)'}`}>
+                      {roundsSinceClean.toLocaleString()} rds since clean
+                      {gun.serviceIntervalRounds ? ` / ${gun.serviceIntervalRounds.toLocaleString()}` : ''}
+                    </span>
+                    {gun.cleanIntervalDays && (
+                      <span style={`font-size:0.72rem;color:${cleanDueByDays ? '#ef4444' : 'var(--text-muted)'}`}>
+                        {daysSinceClean}d / {gun.cleanIntervalDays}d interval
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span style="color:var(--text-muted);font-size:0.75rem">Never logged a cleaning</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {(gun.purchasePrice || gun.currentValue) && (
           <div class="stat-card" style="flex:1">
             <div>

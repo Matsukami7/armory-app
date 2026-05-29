@@ -15,6 +15,7 @@ export const firearms = sqliteTable('firearms', {
   notes: text('notes'),
   photoPath: text('photo_path'),
   serviceIntervalRounds: integer('service_interval_rounds'),
+  cleanIntervalDays: integer('clean_interval_days'),
   tags: text('tags'), // comma-separated tag list
   status: text('status').notNull().default('active'), // active | sold | transferred
   transferDate: text('transfer_date'),

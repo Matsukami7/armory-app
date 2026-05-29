@@ -179,6 +179,7 @@ if (!firearmColumns.includes('generation'))              sqlite.exec("ALTER TABL
 if (!firearmColumns.includes('service_interval_rounds')) sqlite.exec("ALTER TABLE firearms ADD COLUMN service_interval_rounds INTEGER");
 if (!firearmColumns.includes('current_value'))           sqlite.exec("ALTER TABLE firearms ADD COLUMN current_value REAL");
 if (!firearmColumns.includes('tags'))                    sqlite.exec("ALTER TABLE firearms ADD COLUMN tags TEXT");
+if (!firearmColumns.includes('clean_interval_days'))     sqlite.exec("ALTER TABLE firearms ADD COLUMN clean_interval_days INTEGER");
 if (!firearmColumns.includes('status'))                  sqlite.exec("ALTER TABLE firearms ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
 if (!firearmColumns.includes('transfer_date'))           sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_date TEXT");
 if (!firearmColumns.includes('transfer_to'))             sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_to TEXT");

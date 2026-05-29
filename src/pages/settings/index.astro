@@ -61,15 +61,18 @@ const usingDefault = (process.env.ARMORY_PASSWORD ?? 'changeme') === 'changeme';
           <div style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem">
             Download a copy of your SQLite database ({dbSize} KB). Contains all firearms, sessions, ammo, drills, and logs.
           </div>
-          <a href="/api/backup/db" class="btn btn-primary" download>⬇ Download Database</a>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <a href="/api/backup/db" class="btn btn-primary" download>⬇ Download Database</a>
+            <a href="/settings/backup" class="btn btn-secondary">Configure Auto-Backup →</a>
+          </div>
         </div>
         <div style="border-top:1px solid var(--border);padding-top:1rem">
-          <div style="font-size:0.875rem;font-weight:600;color:var(--text);margin-bottom:0.25rem">Photos</div>
+          <div style="font-size:0.875rem;font-weight:600;color:var(--text);margin-bottom:0.25rem">Photos & Documents</div>
           <div style="font-size:0.8125rem;color:var(--text-muted)">
-            Photos are stored in <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">data/uploads/</code> on the server.
+            Photos and documents are stored in <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">data/uploads/</code> on the server.
             In Docker, this is the <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">./data</code> directory next to your
             <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">docker-compose.yml</code>.
-            Copy that entire directory to back up all photos.
+            Copy that entire directory to back up all uploads.
           </div>
         </div>
       </div>

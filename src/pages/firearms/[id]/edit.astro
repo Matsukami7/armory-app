@@ -25,6 +25,7 @@ if (Astro.request.method === 'POST') {
     notes:                 form.get('notes') as string || null,
     currentValue:          form.get('currentValue') ? parseFloat(form.get('currentValue') as string) : null,
     serviceIntervalRounds: form.get('serviceIntervalRounds') ? parseInt(form.get('serviceIntervalRounds') as string) : null,
+    cleanIntervalDays:     form.get('cleanIntervalDays') ? parseInt(form.get('cleanIntervalDays') as string) : null,
   }).where(eq(firearms.id, id));
   return Astro.redirect(`/firearms/${id}`);
 }
@@ -66,7 +67,11 @@ if (Astro.request.method === 'POST') {
 
     <div><label>Notes</label><textarea name="notes" rows="4">{firearm.notes ?? ''}</textarea></div>
 
-    <div><label>Service Interval (rounds)</label><input name="serviceIntervalRounds" type="number" min="1" value={firearm.serviceIntervalRounds ?? ''} placeholder="e.g. 500 — dashboard alerts when due" /></div>
+    <div class="form-row form-row-2">
+      <div><label>Cleaning Interval (rounds)</label><input name="serviceIntervalRounds" type="number" min="1" value={firearm.serviceIntervalRounds ?? ''} placeholder="e.g. 500" /></div>
+      <div><label>Cleaning Interval (days)</label><input name="cleanIntervalDays" type="number" min="1" value={firearm.cleanIntervalDays ?? ''} placeholder="e.g. 90" /></div>
+    </div>
+    <p style="font-size:0.72rem;color:var(--text-muted);margin-top:-0.5rem">Either threshold triggers a cleaning alert — whichever comes first.</p>
 
     <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
   </form>
