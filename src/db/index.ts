@@ -136,9 +136,15 @@ const sessionColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('rang
 if (!sessionColumns.includes('tags'))                    sqlite.exec("ALTER TABLE range_sessions ADD COLUMN tags TEXT");
 
 const accColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('accessories')").all() as { name: string }[]).map(r => r.name);
-if (!accColumns.includes('lumens'))       sqlite.exec("ALTER TABLE accessories ADD COLUMN lumens INTEGER");
-if (!accColumns.includes('power_type'))   sqlite.exec("ALTER TABLE accessories ADD COLUMN power_type TEXT");
-if (!accColumns.includes('battery_type')) sqlite.exec("ALTER TABLE accessories ADD COLUMN battery_type TEXT");
+if (!accColumns.includes('lumens'))               sqlite.exec("ALTER TABLE accessories ADD COLUMN lumens INTEGER");
+if (!accColumns.includes('power_type'))           sqlite.exec("ALTER TABLE accessories ADD COLUMN power_type TEXT");
+if (!accColumns.includes('battery_type'))         sqlite.exec("ALTER TABLE accessories ADD COLUMN battery_type TEXT");
+if (!accColumns.includes('photo_path'))           sqlite.exec("ALTER TABLE accessories ADD COLUMN photo_path TEXT");
+if (!accColumns.includes('zero_data'))            sqlite.exec("ALTER TABLE accessories ADD COLUMN zero_data TEXT");
+if (!accColumns.includes('battery_changed_date')) sqlite.exec("ALTER TABLE accessories ADD COLUMN battery_changed_date TEXT");
+
+const drillColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('drills')").all() as { name: string }[]).map(r => r.name);
+if (!drillColumns.includes('par_time')) sqlite.exec("ALTER TABLE drills ADD COLUMN par_time REAL");
 
 export const db = drizzle(sqlite, { schema });
 export type DB = typeof db;

@@ -1,0 +1,230 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { rangeSessions, sessionFirearms, firearms, ammoInventory, drills } from '../../db/schema';
+import { eq, sum } from 'drizzle-orm';
+
+const aId = parseInt(Astro.url.searchParams.get('a') ?? '');
+const bId = parseInt(Astro.url.searchParams.get('b') ?? '');
+
+const allSessions = await db.select().from(rangeSessions).orderBy(rangeSessions.date);
+
+async function loadSession(id: number) {
+  if (isNaN(id)) return null;
+  const [session] = await db.select().from(rangeSessions).where(eq(rangeSessions.id, id));
+  if (!session) return null;
+
+  const guns = await db
+    .select({ sf: sessionFirearms, f: firearms, a: ammoInventory })
+    .from(sessionFirearms)
+    .leftJoin(firearms, eq(sessionFirearms.firearmId, firearms.id))
+    .leftJoin(ammoInventory, eq(sessionFirearms.ammoId, ammoInventory.id))
+    .where(eq(sessionFirearms.sessionId, id));
+
+  const sessionDrills = await db.select().from(drills).where(eq(drills.sessionId, id));
+  const totalRounds = guns.reduce((s, r) => s + r.sf.roundsFired, 0);
+  const cost = guns.reduce((s, r) => s + r.sf.roundsFired * (r.a?.costPerRound ?? 0), 0);
+
+  return { session, guns, drills: sessionDrills, totalRounds, cost };
+}
+
+const [sessA, sessB] = await Promise.all([loadSession(aId), loadSession(bId)]);
+const ready = sessA && sessB;
+---
+
+<Layout title="Compare Sessions" backHref="/sessions">
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:60rem">
+
+    <!-- Picker -->
+    <div class="card" style="padding:1.25rem">
+      <form method="GET" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.75rem;align-items:end">
+        <div>
+          <label style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:0.375rem">Session A</label>
+          <select name="a">
+            <option value="">Pick a session…</option>
+            {allSessions.map(s => (
+              <option value={s.id} selected={s.id === aId}>{s.date} — {s.location ?? 'No location'}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);display:block;margin-bottom:0.375rem">Session B</label>
+          <select name="b">
+            <option value="">Pick a session…</option>
+            {allSessions.map(s => (
+              <option value={s.id} selected={s.id === bId}>{s.date} — {s.location ?? 'No location'}</option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Compare</button>
+      </form>
+    </div>
+
+    {!ready && (
+      <div class="empty-state">
+        <div class="empty-state-icon">⚖️</div>
+        <div class="empty-state-text">Pick two sessions above to compare them side by side.</div>
+      </div>
+    )}
+
+    {ready && (() => {
+      // Find shared drill names for comparison
+      const drillNamesA = new Map(sessA.drills.map(d => [d.name, d]));
+      const drillNamesB = new Map(sessB.drills.map(d => [d.name, d]));
+      const allDrillNames = [...new Set([...drillNamesA.keys(), ...drillNamesB.keys()])];
+
+      function parseScore(s: string | null): number | null {
+        if (!s) return null;
+        const m = s?.match(/(\d+(?:\.\d+)?)/);
+        return m ? parseFloat(m[1]) : null;
+      }
+
+      return (
+        <div style="display:flex;flex-direction:column;gap:1.25rem">
+
+          <!-- Overview stats -->
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.75rem;align-items:stretch">
+
+            {/* Col A */}
+            <div class="card" style="padding:1.25rem;display:flex;flex-direction:column;gap:0.75rem">
+              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Session A</div>
+              <div style="font-size:1.125rem;font-weight:700;color:var(--text)">{sessA.session.date}</div>
+              {sessA.session.location && <div style="font-size:0.8125rem;color:var(--text-muted)">{sessA.session.location}</div>}
+              <div style="display:flex;flex-direction:column;gap:0.375rem;margin-top:0.25rem">
+                <div style="display:flex;justify-content:space-between">
+                  <span style="font-size:0.75rem;color:var(--text-dim)">Rounds</span>
+                  <span style="font-size:0.875rem;font-weight:700;color:#f97316">{sessA.totalRounds.toLocaleString()}</span>
+                </div>
+                {sessA.cost > 0 && (
+                  <div style="display:flex;justify-content:space-between">
+                    <span style="font-size:0.75rem;color:var(--text-dim)">Cost</span>
+                    <span style="font-size:0.875rem;font-weight:700;color:#22c55e">${sessA.cost.toFixed(2)}</span>
+                  </div>
+                )}
+                {sessA.session.durationMinutes && (
+                  <div style="display:flex;justify-content:space-between">
+                    <span style="font-size:0.75rem;color:var(--text-dim)">Duration</span>
+                    <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{sessA.session.durationMinutes}min</span>
+                  </div>
+                )}
+                <div style="display:flex;justify-content:space-between">
+                  <span style="font-size:0.75rem;color:var(--text-dim)">Drills</span>
+                  <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{sessA.drills.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* VS divider */}
+            <div style="display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:900;color:var(--text-dim);letter-spacing:0.05em;padding:0 0.25rem">VS</div>
+
+            {/* Col B */}
+            <div class="card" style="padding:1.25rem;display:flex;flex-direction:column;gap:0.75rem">
+              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Session B</div>
+              <div style="font-size:1.125rem;font-weight:700;color:var(--text)">{sessB.session.date}</div>
+              {sessB.session.location && <div style="font-size:0.8125rem;color:var(--text-muted)">{sessB.session.location}</div>}
+              <div style="display:flex;flex-direction:column;gap:0.375rem;margin-top:0.25rem">
+                <div style="display:flex;justify-content:space-between">
+                  <span style="font-size:0.75rem;color:var(--text-dim)">Rounds</span>
+                  <span style={`font-size:0.875rem;font-weight:700;color:${sessB.totalRounds > sessA.totalRounds ? '#22c55e' : sessB.totalRounds < sessA.totalRounds ? '#f87171' : '#f97316'}`}>{sessB.totalRounds.toLocaleString()}</span>
+                </div>
+                {(sessA.cost > 0 || sessB.cost > 0) && (
+                  <div style="display:flex;justify-content:space-between">
+                    <span style="font-size:0.75rem;color:var(--text-dim)">Cost</span>
+                    <span style="font-size:0.875rem;font-weight:700;color:#22c55e">{sessB.cost > 0 ? `$${sessB.cost.toFixed(2)}` : '—'}</span>
+                  </div>
+                )}
+                {(sessA.session.durationMinutes || sessB.session.durationMinutes) && (
+                  <div style="display:flex;justify-content:space-between">
+                    <span style="font-size:0.75rem;color:var(--text-dim)">Duration</span>
+                    <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{sessB.session.durationMinutes ? `${sessB.session.durationMinutes}min` : '—'}</span>
+                  </div>
+                )}
+                <div style="display:flex;justify-content:space-between">
+                  <span style="font-size:0.75rem;color:var(--text-dim)">Drills</span>
+                  <span style={`font-size:0.875rem;font-weight:600;color:${sessB.drills.length > sessA.drills.length ? '#22c55e' : 'var(--text)'}`}>{sessB.drills.length}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Drill comparison -->
+          {allDrillNames.length > 0 && (
+            <div>
+              <div class="section-header">
+                <span style="color:var(--accent);font-size:0.75rem">◎</span>
+                <span class="section-title">Drill Comparison</span>
+              </div>
+              <div class="card card-divide">
+                {allDrillNames.map(name => {
+                  const dA = drillNamesA.get(name);
+                  const dB = drillNamesB.get(name);
+                  const nA = parseScore(dA?.score ?? null);
+                  const nB = parseScore(dB?.score ?? null);
+                  const improved = nA !== null && nB !== null && nB > nA;
+                  const regressed = nA !== null && nB !== null && nB < nA;
+                  return (
+                    <div class="list-row" style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.75rem;align-items:center">
+                      <div style="text-align:right">
+                        {dA ? (
+                          <div>
+                            {dA.score && <span class="pill pill-accent">{dA.score}</span>}
+                            {dA.parTime != null && <span class="pill pill-default" style="margin-left:0.25rem">par {dA.parTime}s</span>}
+                            {!dA.score && <span style="font-size:0.75rem;color:var(--text-dim)">—</span>}
+                          </div>
+                        ) : <span style="font-size:0.75rem;color:var(--text-dim)">not run</span>}
+                      </div>
+                      <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-align:center;white-space:nowrap">{name}</div>
+                      <div>
+                        {dB ? (
+                          <div style="display:flex;align-items:center;gap:0.375rem;flex-wrap:wrap">
+                            {dB.score && <span class={`pill ${improved ? 'pill-accent' : regressed ? '' : 'pill-accent'}`} style={improved ? 'background:rgba(34,197,94,0.15);color:#4ade80;border-color:rgba(34,197,94,0.3)' : regressed ? 'background:rgba(248,113,113,0.15);color:#f87171;border-color:rgba(248,113,113,0.3)' : ''}>{dB.score}</span>}
+                            {dB.parTime != null && <span class="pill pill-default">par {dB.parTime}s</span>}
+                            {improved && <span style="font-size:0.65rem;color:#4ade80">▲</span>}
+                            {regressed && <span style="font-size:0.65rem;color:#f87171">▼</span>}
+                            {!dB.score && <span style="font-size:0.75rem;color:var(--text-dim)">—</span>}
+                          </div>
+                        ) : <span style="font-size:0.75rem;color:var(--text-dim)">not run</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <!-- Firearms used -->
+          {(sessA.guns.length > 0 || sessB.guns.length > 0) && (
+            <div>
+              <div class="section-header">
+                <span style="color:var(--accent);font-size:0.75rem">◉</span>
+                <span class="section-title">Firearms Used</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+                <div class="card card-divide">
+                  {sessA.guns.map(r => (
+                    <div class="list-row" style="justify-content:space-between">
+                      <div style="font-size:0.8125rem;color:var(--text)">{r.f?.name ?? 'Unknown'}</div>
+                      <span style="font-size:0.8125rem;font-weight:700;color:#f97316">{r.sf.roundsFired} rds</span>
+                    </div>
+                  ))}
+                  {sessA.guns.length === 0 && <div class="list-row" style="color:var(--text-dim);font-size:0.75rem">None logged</div>}
+                </div>
+                <div class="card card-divide">
+                  {sessB.guns.map(r => (
+                    <div class="list-row" style="justify-content:space-between">
+                      <div style="font-size:0.8125rem;color:var(--text)">{r.f?.name ?? 'Unknown'}</div>
+                      <span style="font-size:0.8125rem;font-weight:700;color:#f97316">{r.sf.roundsFired} rds</span>
+                    </div>
+                  ))}
+                  {sessB.guns.length === 0 && <div class="list-row" style="color:var(--text-dim);font-size:0.75rem">None logged</div>}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    })()}
+
+  </div>
+</Layout>

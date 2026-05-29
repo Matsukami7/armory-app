@@ -59,6 +59,13 @@ if (Astro.request.method === 'POST') {
 const purchases = await db.select().from(ammoPurchases).where(eq(ammoPurchases.ammoId, id)).orderBy(desc(ammoPurchases.date));
 const totalSpent = purchases.reduce((s, p) => s + (p.totalCost ?? 0), 0);
 const today = new Date().toISOString().split('T')[0];
+
+// Price trend: purchases in chronological order with a cost-per-round value
+const pricePoints = [...purchases].reverse().flatMap(p =>
+  p.totalCost && p.quantity > 0
+    ? [{ date: p.date, cpr: parseFloat((p.totalCost / p.quantity).toFixed(4)) }]
+    : []
+);
 ---
 
 <Layout title={`${ammo.brand} ${ammo.caliber}`} sub={`${ammo.quantity.toLocaleString()} rounds in stock`} backHref="/ammo">
@@ -130,6 +137,18 @@ const today = new Date().toISOString().split('T')[0];
         </div>
       )}
 
+      {pricePoints.length >= 2 && (
+        <div class="card" style="padding:1.25rem;margin-bottom:0.75rem">
+          <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.75rem">Cost / Round Trend</div>
+          <canvas
+            id="price-chart"
+            data-points={JSON.stringify(pricePoints)}
+            style="width:100%;height:110px"
+            height="110"
+          ></canvas>
+        </div>
+      )}
+
       <details class="accordion">
         <summary>+ Log Purchase</summary>
         <form method="POST" class="form-section">
@@ -156,3 +175,82 @@ const today = new Date().toISOString().split('T')[0];
 
   </div>
 </Layout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('price-chart') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const points: { date: string; cpr: number }[] = JSON.parse(canvas.dataset.points!);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const style = getComputedStyle(document.documentElement);
+    const accent = style.getPropertyValue('--accent').trim() || '#06b6d4';
+    const border = style.getPropertyValue('--border').trim() || '#1e2433';
+
+    const w = canvas.offsetWidth || 300;
+    const h = canvas.offsetHeight || 110;
+    canvas.width = w * devicePixelRatio;
+    canvas.height = h * devicePixelRatio;
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+
+    const pad = { top: 10, right: 10, bottom: 28, left: 46 };
+    const chartW = w - pad.left - pad.right;
+    const chartH = h - pad.top - pad.bottom;
+    const vals = points.map(p => p.cpr);
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const range = max - min || 0.001;
+
+    const xPos = (i: number) => pad.left + (i / (vals.length - 1)) * chartW;
+    const yPos = (v: number) => pad.top + chartH - ((v - min) / range) * chartH;
+
+    // Grid
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    [0, 0.5, 1].forEach(t => {
+      const y = pad.top + t * chartH;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke();
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '10px ui-monospace,monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`$${(max - t * range).toFixed(3)}`, pad.left - 4, y + 3.5);
+    });
+
+    // Area
+    ctx.beginPath();
+    ctx.moveTo(xPos(0), yPos(vals[0]));
+    vals.forEach((v, i) => { if (i > 0) ctx.lineTo(xPos(i), yPos(v)); });
+    ctx.lineTo(xPos(vals.length - 1), pad.top + chartH);
+    ctx.lineTo(xPos(0), pad.top + chartH);
+    ctx.closePath();
+    ctx.fillStyle = accent + '22';
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    vals.forEach((v, i) => i === 0 ? ctx.moveTo(xPos(i), yPos(v)) : ctx.lineTo(xPos(i), yPos(v)));
+    ctx.stroke();
+
+    // Dots + labels
+    vals.forEach((v, i) => {
+      ctx.beginPath();
+      ctx.arc(xPos(i), yPos(v), 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = accent;
+      ctx.fill();
+      ctx.strokeStyle = '#0b0e14';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      if (i === 0 || i === vals.length - 1 || vals.length <= 6) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '9px ui-sans-serif,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(points[i].date.slice(5), xPos(i), h - 6);
+      }
+    });
+  });
+</script>

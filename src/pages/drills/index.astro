@@ -33,11 +33,15 @@ function parseScore(s: string | null): number | null {
 
 // Build chart data per group — only groups with ≥2 numeric scores get a chart
 const chartData = groups.map(([name, rows]) => {
-  const points = [...rows].reverse().flatMap(r => {
+  const chronological = [...rows].reverse();
+  const points = chronological.flatMap(r => {
     const n = parseScore(r.d.score);
     return n !== null && r.sessionDate ? [{ date: r.sessionDate, value: n, label: r.d.score! }] : [];
   });
-  return { name, points };
+  const parPoints = chronological.flatMap(r => {
+    return r.d.parTime != null && r.sessionDate ? [{ date: r.sessionDate, value: r.d.parTime }] : [];
+  });
+  return { name, points, parPoints };
 }).filter(g => g.points.length >= 2);
 ---
 
@@ -64,7 +68,7 @@ const chartData = groups.map(([name, rows]) => {
             <div class="card" style="padding:1.25rem">
               <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.75rem">{g.name}</div>
               <canvas
-                data-chart={JSON.stringify({ labels: g.points.map(p => p.date), values: g.points.map(p => p.value), tooltips: g.points.map(p => p.label) })}
+                data-chart={JSON.stringify({ labels: g.points.map(p => p.date), values: g.points.map(p => p.value), tooltips: g.points.map(p => p.label), parValues: g.parPoints.length >= 2 ? g.parPoints.map(p => p.value) : [] })}
                 style="width:100%;height:120px"
                 height="120"
               ></canvas>
@@ -89,6 +93,7 @@ const chartData = groups.map(([name, rows]) => {
                 <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
                   <span style="font-size:0.8125rem;color:var(--text-muted)">{r.sessionDate}</span>
                   {r.d.score && <span class="pill pill-accent">{r.d.score}</span>}
+                  {r.d.parTime != null && <span class="pill pill-default">par {r.d.parTime}s</span>}
                   {r.d.distance && <span class="pill pill-default">{r.d.distance}</span>}
                   {r.firearmName && <span style="font-size:0.7rem;color:var(--text-dim)">{r.firearmName}</span>}
                 </div>
@@ -117,7 +122,7 @@ const chartData = groups.map(([name, rows]) => {
     const border = style.getPropertyValue('--border').trim() || '#1e2433';
 
     document.querySelectorAll<HTMLCanvasElement>('canvas[data-chart]').forEach(canvas => {
-      const { labels, values, tooltips } = JSON.parse(canvas.dataset.chart!);
+      const { labels, values, tooltips, parValues } = JSON.parse(canvas.dataset.chart!);
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -130,11 +135,12 @@ const chartData = groups.map(([name, rows]) => {
       const pad = { top: 10, right: 10, bottom: 28, left: 36 };
       const chartW = w - pad.left - pad.right;
       const chartH = h - pad.top - pad.bottom;
-      const min = Math.min(...values);
-      const max = Math.max(...values);
+      const allVals = [...values, ...(parValues.length ? parValues : [])];
+      const min = Math.min(...allVals);
+      const max = Math.max(...allVals);
       const range = max - min || 1;
 
-      const xPos = (i: number) => pad.left + (i / (values.length - 1)) * chartW;
+      const xPos = (i: number, len: number) => pad.left + (i / (len - 1)) * chartW;
       const yPos = (v: number) => pad.top + chartH - ((v - min) / range) * chartH;
 
       // Grid lines
@@ -144,45 +150,55 @@ const chartData = groups.map(([name, rows]) => {
         const y = pad.top + t * chartH;
         ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke();
         ctx.fillStyle = '#6b7280';
-        ctx.font = `${10 * devicePixelRatio / devicePixelRatio}px ui-monospace,monospace`;
+        ctx.font = `10px ui-monospace,monospace`;
         ctx.textAlign = 'right';
         ctx.fillText((max - t * range).toFixed(1), pad.left - 4, y + 3.5);
       });
 
-      // Area fill
-      ctx.beginPath();
-      ctx.moveTo(xPos(0), yPos(values[0]));
-      values.forEach((v: number, i: number) => { if (i > 0) ctx.lineTo(xPos(i), yPos(v)); });
-      ctx.lineTo(xPos(values.length - 1), pad.top + chartH);
-      ctx.lineTo(xPos(0), pad.top + chartH);
-      ctx.closePath();
-      ctx.fillStyle = accent + '22';
-      ctx.fill();
-
-      // Line
-      ctx.beginPath();
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      values.forEach((v: number, i: number) => i === 0 ? ctx.moveTo(xPos(i), yPos(v)) : ctx.lineTo(xPos(i), yPos(v)));
-      ctx.stroke();
-
-      // Dots + x-axis labels
-      values.forEach((v: number, i: number) => {
+      const drawSeries = (vals: number[], color: string, dashed: boolean) => {
+        const len = vals.length;
+        // Area fill (only for primary)
+        if (!dashed) {
+          ctx.beginPath();
+          ctx.moveTo(xPos(0, len), yPos(vals[0]));
+          vals.forEach((v, i) => { if (i > 0) ctx.lineTo(xPos(i, len), yPos(v)); });
+          ctx.lineTo(xPos(len - 1, len), pad.top + chartH);
+          ctx.lineTo(xPos(0, len), pad.top + chartH);
+          ctx.closePath();
+          ctx.fillStyle = color + '22';
+          ctx.fill();
+        }
+        // Line
         ctx.beginPath();
-        ctx.arc(xPos(i), yPos(v), 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = accent;
-        ctx.fill();
-        ctx.strokeStyle = '#0b0e14';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = dashed ? 1.5 : 2;
+        ctx.lineJoin = 'round';
+        if (dashed) ctx.setLineDash([4, 3]);
+        vals.forEach((v, i) => i === 0 ? ctx.moveTo(xPos(i, len), yPos(v)) : ctx.lineTo(xPos(i, len), yPos(v)));
         ctx.stroke();
+        ctx.setLineDash([]);
+        // Dots
+        vals.forEach((v, i) => {
+          ctx.beginPath();
+          ctx.arc(xPos(i, len), yPos(v), 3, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = '#0b0e14';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        });
+      };
 
+      drawSeries(values, accent, false);
+      if (parValues.length >= 2) drawSeries(parValues, '#f59e0b', true);
+
+      // X-axis labels (primary series)
+      values.forEach((_: number, i: number) => {
         if (i === 0 || i === values.length - 1 || values.length <= 6) {
           ctx.fillStyle = '#6b7280';
           ctx.font = `9px ui-sans-serif,sans-serif`;
           ctx.textAlign = 'center';
-          const label = labels[i].slice(5); // MM-DD
-          ctx.fillText(label, xPos(i), h - 6);
+          ctx.fillText(labels[i].slice(5), xPos(i, values.length), h - 6);
         }
       });
     });

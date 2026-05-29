@@ -40,6 +40,9 @@ export const accessories = sqliteTable('accessories', {
   lumens: integer('lumens'),
   powerType: text('power_type'),    // rechargeable | battery
   batteryType: text('battery_type'), // CR123A, 18650, AA, AAA, CR2, other
+  photoPath: text('photo_path'),
+  zeroData: text('zero_data'),       // optic zero info (distance, clicks, etc.)
+  batteryChangedDate: text('battery_changed_date'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
@@ -113,6 +116,7 @@ export const drills = sqliteTable('drills', {
   name: text('name').notNull(),
   distance: text('distance'),
   score: text('score'),
+  parTime: real('par_time'), // seconds
   notes: text('notes'),
   targetPhotoPath: text('target_photo_path'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),

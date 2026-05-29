@@ -74,7 +74,26 @@ if (Astro.request.method === 'POST') {
       lumens:        accType === 'light' && form.get('lumens') ? parseInt(form.get('lumens') as string) : null,
       powerType:     accType === 'light' ? form.get('powerType') as string || null : null,
       batteryType:   accType === 'light' && form.get('powerType') === 'battery' ? form.get('batteryType') as string || null : null,
+      zeroData:      accType === 'optic' ? form.get('zeroData') as string || null : null,
     });
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'upload_accessory_photo') {
+    const accId = parseInt(form.get('accId') as string);
+    const file = form.get('photo') as File | null;
+    if (file && file.size > 0) {
+      const path = await saveUpload(file, 'accessories');
+      if (path) await db.update(accessories).set({ photoPath: path }).where(eq(accessories.id, accId));
+    }
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'update_accessory_notes') {
+    const accId = parseInt(form.get('accId') as string);
+    await db.update(accessories).set({
+      zeroData:           form.get('zeroData') as string || null,
+      batteryChangedDate: form.get('batteryChangedDate') as string || null,
+      notes:              form.get('notes') as string || null,
+    }).where(eq(accessories.id, accId));
     return Astro.redirect(`/firearms/${id}`);
   }
   if (action === 'delete_accessory') {
@@ -261,35 +280,59 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
       {accs.length > 0 && (
         <div class="card card-divide" style="margin-bottom:0.75rem">
           {accs.map(a => (
-            <div class="list-row" style="justify-content:space-between;align-items:flex-start">
-              <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-                  <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{a.name}</span>
-                  {a.type === 'light' && a.lumens && (
-                    <span class="pill pill-accent">{a.lumens} lm</span>
-                  )}
-                </div>
-                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
-                  {a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}
-                  {a.purchasePrice ? ` · $${a.purchasePrice.toFixed(2)}` : ''}
-                </div>
-                {a.type === 'light' && a.powerType && (
-                  <div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.25rem">
-                    <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim)">
-                      {a.powerType === 'rechargeable' ? '⚡ Rechargeable' : `🔋 Battery`}
-                    </span>
-                    {a.powerType === 'battery' && a.batteryType && (
-                      <span class="pill pill-default" style="font-size:0.65rem">{a.batteryType}</span>
-                    )}
+            <div style="padding:0.875rem 1rem">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.75rem">
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                    <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{a.name}</span>
+                    {a.type === 'light' && a.lumens && <span class="pill pill-accent">{a.lumens} lm</span>}
                   </div>
-                )}
-                {a.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{a.notes}</div>}
+                  <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
+                    {a.type}{a.make ? ` · ${a.make} ${a.model ?? ''}` : ''}
+                    {a.purchasePrice ? ` · $${a.purchasePrice.toFixed(2)}` : ''}
+                  </div>
+                  {a.type === 'light' && a.powerType && (
+                    <div style="display:flex;align-items:center;gap:0.375rem;margin-top:0.25rem;flex-wrap:wrap">
+                      <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim)">
+                        {a.powerType === 'rechargeable' ? '⚡ Rechargeable' : '🔋 Battery'}
+                      </span>
+                      {a.powerType === 'battery' && a.batteryType && <span class="pill pill-default" style="font-size:0.65rem">{a.batteryType}</span>}
+                      {a.batteryChangedDate && <span style="font-size:0.7rem;color:var(--text-dim)">changed {a.batteryChangedDate}</span>}
+                    </div>
+                  )}
+                  {a.zeroData && <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem">🎯 {a.zeroData}</div>}
+                  {a.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{a.notes}</div>}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:0.375rem;align-items:flex-end;flex-shrink:0">
+                  {a.photoPath && <a href={a.photoPath} target="_blank"><img src={a.photoPath} alt={a.name} style="width:5rem;height:3.5rem;object-fit:cover;border-radius:0.25rem;border:1px solid var(--border)" /></a>}
+                  <div style="display:flex;gap:0.375rem;align-items:center">
+                    <form method="POST" enctype="multipart/form-data">
+                      <input type="hidden" name="_action" value="upload_accessory_photo" />
+                      <input type="hidden" name="accId" value={a.id} />
+                      <label class="btn btn-secondary btn-sm" style="cursor:pointer;font-size:0.65rem">
+                        {a.photoPath ? '📷' : '+ Photo'}
+                        <input type="file" name="photo" accept="image/*" style="display:none" onchange="this.form.submit()" />
+                      </label>
+                    </form>
+                    <form method="POST">
+                      <input type="hidden" name="_action" value="delete_accessory" />
+                      <input type="hidden" name="accId" value={a.id} />
+                      <button type="submit" class="btn-delete">✕</button>
+                    </form>
+                  </div>
+                </div>
               </div>
-              <form method="POST">
-                <input type="hidden" name="_action" value="delete_accessory" />
-                <input type="hidden" name="accId" value={a.id} />
-                <button type="submit" class="btn-delete">✕</button>
-              </form>
+              <details style="margin-top:0.5rem">
+                <summary style="font-size:0.65rem;color:var(--text-dim);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:0.25rem">▸ Edit notes</summary>
+                <form method="POST" class="form-section" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border)">
+                  <input type="hidden" name="_action" value="update_accessory_notes" />
+                  <input type="hidden" name="accId" value={a.id} />
+                  {a.type === 'optic' && <div><label>Zero Data</label><input name="zeroData" type="text" value={a.zeroData ?? ''} placeholder="e.g. 50yd zero, 12 clicks up" /></div>}
+                  {a.type === 'light' && <div><label>Battery Changed</label><input name="batteryChangedDate" type="date" value={a.batteryChangedDate ?? ''} /></div>}
+                  <div><label>Notes</label><input name="notes" type="text" value={a.notes ?? ''} /></div>
+                  <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+                </form>
+              </details>
             </div>
           ))}
         </div>
@@ -345,6 +388,10 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
               </select>
             </div>
           </div>
+          <div id="optic-fields" style="display:none;border-top:1px solid var(--border);padding-top:0.75rem;margin-top:0.25rem">
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:0.75rem">Optic Details</div>
+            <div><label>Zero Data</label><input name="zeroData" type="text" placeholder="e.g. 50yd zero, 12 clicks up" /></div>
+          </div>
           <div><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
           <button type="submit" class="btn btn-primary">Add Accessory</button>
         </form>
@@ -354,8 +401,10 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
           const type = document.getElementById('acc-type')?.value;
           const power = document.getElementById('acc-power')?.value;
           const lightFields = document.getElementById('light-fields');
+          const opticFields = document.getElementById('optic-fields');
           const batteryFields = document.getElementById('battery-fields');
           if (lightFields) lightFields.style.display = type === 'light' ? 'block' : 'none';
+          if (opticFields) opticFields.style.display = type === 'optic' ? 'block' : 'none';
           if (batteryFields) batteryFields.style.display = power === 'battery' ? 'block' : 'none';
         }
       </script>
