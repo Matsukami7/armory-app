@@ -109,6 +109,19 @@ export const sessionFirearms = sqliteTable('session_firearms', {
   ammoId: integer('ammo_id').references(() => ammoInventory.id),
 });
 
+export const magazines = sqliteTable('magazines', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
+  label: text('label').notNull(),
+  capacity: integer('capacity'),
+  roundCount: integer('round_count').notNull().default(0),
+  springIntervalRounds: integer('spring_interval_rounds'),
+  springReplacedDate: text('spring_replaced_date'),
+  purchasedDate: text('purchased_date'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
 export const footage = sqliteTable('footage', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),

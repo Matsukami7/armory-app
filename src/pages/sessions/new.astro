@@ -34,7 +34,16 @@ const pastLocations = locationRows.map(r => r.location as string);
     </datalist>
     <div><label>Location / Range</label><input name="location" type="text" list="locations" placeholder="e.g. Oakwood Indoor Range" /></div>
 
-    <div><label>Weather / Conditions</label><input name="weather" type="text" placeholder="e.g. Sunny, 75°F, light wind" /></div>
+    <div>
+      <label>Weather / Conditions</label>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <input id="weather-input" name="weather" type="text" placeholder="e.g. Sunny, 75°F, light wind" style="flex:1" />
+        <button type="button" id="weather-btn" class="btn btn-secondary" style="white-space:nowrap;flex-shrink:0">
+          Get Weather
+        </button>
+      </div>
+      <div id="weather-status" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem;min-height:1em"></div>
+    </div>
 
     <div><label>Session Notes</label><textarea name="notes" rows="3" placeholder="Goals, observations, etc."></textarea></div>
 
@@ -43,3 +52,49 @@ const pastLocations = locationRows.map(r => r.location as string);
     <button type="submit" class="btn btn-primary btn-full">Create Session</button>
   </form>
 </Layout>
+
+<script>
+const btn = document.getElementById('weather-btn') as HTMLButtonElement;
+const input = document.getElementById('weather-input') as HTMLInputElement;
+const status = document.getElementById('weather-status')!;
+
+const WMO: Record<number, string> = {
+  0:'Clear',1:'Mainly Clear',2:'Partly Cloudy',3:'Overcast',
+  45:'Foggy',48:'Icy Fog',
+  51:'Light Drizzle',53:'Drizzle',55:'Heavy Drizzle',
+  61:'Light Rain',63:'Rain',65:'Heavy Rain',
+  71:'Light Snow',73:'Snow',75:'Heavy Snow',
+  77:'Snow Grains',
+  80:'Light Showers',81:'Showers',82:'Heavy Showers',
+  85:'Snow Showers',86:'Heavy Snow Showers',
+  95:'Thunderstorm',96:'Thunderstorm w/ Hail',99:'Thunderstorm w/ Heavy Hail',
+};
+
+btn.addEventListener('click', async () => {
+  if (!navigator.geolocation) { status.textContent = 'Geolocation not supported'; return; }
+  btn.disabled = true;
+  status.textContent = 'Getting location…';
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    status.textContent = 'Fetching weather…';
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const c = data.current;
+      const desc = WMO[c.weather_code] ?? 'Unknown';
+      const temp = Math.round(c.temperature_2m);
+      const wind = Math.round(c.wind_speed_10m);
+      input.value = `${desc}, ${temp}°F, Wind ${wind}mph`;
+      status.textContent = '';
+    } catch {
+      status.textContent = 'Weather lookup failed';
+    } finally {
+      btn.disabled = false;
+    }
+  }, () => {
+    status.textContent = 'Location access denied';
+    btn.disabled = false;
+  });
+});
+</script>

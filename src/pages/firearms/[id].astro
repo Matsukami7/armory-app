@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { firearms, firearmPhotos, accessories, maintenanceLogs, sessionFirearms } from '../../db/schema';
+import { firearms, firearmPhotos, accessories, maintenanceLogs, sessionFirearms, magazines } from '../../db/schema';
 import { eq, sum, desc } from 'drizzle-orm';
 import { saveUpload } from '../../lib/uploads';
 import { parseTags, serializeTags, tagColor } from '../../lib/tags';
@@ -100,6 +100,33 @@ if (Astro.request.method === 'POST') {
     await db.delete(accessories).where(eq(accessories.id, parseInt(form.get('accId') as string)));
     return Astro.redirect(`/firearms/${id}`);
   }
+  if (action === 'add_magazine') {
+    await db.insert(magazines).values({
+      firearmId:           id,
+      label:               form.get('label') as string,
+      capacity:            form.get('capacity') ? parseInt(form.get('capacity') as string) : null,
+      springIntervalRounds: form.get('springIntervalRounds') ? parseInt(form.get('springIntervalRounds') as string) : null,
+      purchasedDate:       form.get('purchasedDate') as string || null,
+      notes:               form.get('notes') as string || null,
+    });
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'adjust_magazine') {
+    const magId = parseInt(form.get('magId') as string);
+    const delta = parseInt(form.get('delta') as string);
+    await db.run(sql`UPDATE magazines SET round_count = MAX(0, round_count + ${delta}) WHERE id = ${magId}`);
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'log_spring_replace') {
+    const magId = parseInt(form.get('magId') as string);
+    const date = form.get('date') as string;
+    await db.update(magazines).set({ springReplacedDate: date, roundCount: 0 }).where(eq(magazines.id, magId));
+    return Astro.redirect(`/firearms/${id}`);
+  }
+  if (action === 'delete_magazine') {
+    await db.delete(magazines).where(eq(magazines.id, parseInt(form.get('magId') as string)));
+    return Astro.redirect(`/firearms/${id}`);
+  }
   if (action === 'add_tag') {
     const tag = (form.get('tag') as string ?? '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
     if (tag) {
@@ -124,6 +151,7 @@ const [gun]      = await db.select().from(firearms).where(eq(firearms.id, id));
 const gallery    = await db.select().from(firearmPhotos).where(eq(firearmPhotos.firearmId, id)).orderBy(desc(firearmPhotos.createdAt));
 const accs       = await db.select().from(accessories).where(eq(accessories.firearmId, id));
 const logs       = await db.select().from(maintenanceLogs).where(eq(maintenanceLogs.firearmId, id)).orderBy(desc(maintenanceLogs.date));
+const mags       = await db.select().from(magazines).where(eq(magazines.firearmId, id)).orderBy(magazines.label);
 const [rRow]     = await db.select({ total: sum(sessionFirearms.roundsFired) }).from(sessionFirearms).where(eq(sessionFirearms.firearmId, id));
 const totalRounds = Number(rRow?.total ?? 0);
 
@@ -408,6 +436,87 @@ const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', insp
           if (batteryFields) batteryFields.style.display = power === 'battery' ? 'block' : 'none';
         }
       </script>
+    </div>
+
+    <!-- Magazines -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">▦</span>
+        <span class="section-title">Magazines</span>
+      </div>
+      {mags.length > 0 && (
+        <div class="card card-divide" style="margin-bottom:0.75rem">
+          {mags.map(m => {
+            const overdue = m.springIntervalRounds && m.roundCount >= m.springIntervalRounds;
+            return (
+              <div style="padding:0.875rem 1rem">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                      <span style="font-size:0.875rem;font-weight:600;color:var(--text)">{m.label}</span>
+                      {m.capacity && <span class="pill pill-default">{m.capacity} rd</span>}
+                      {overdue && <span style="font-size:0.65rem;font-weight:700;color:#f87171;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);padding:0.1rem 0.4rem;border-radius:9999px">Spring Due</span>}
+                    </div>
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
+                      {m.springReplacedDate ? `Spring replaced ${m.springReplacedDate}` : 'Spring never replaced'}
+                      {m.springIntervalRounds ? ` · interval ${m.springIntervalRounds.toLocaleString()} rds` : ''}
+                    </div>
+                    {m.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{m.notes}</div>}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+                    <form method="POST">
+                      <input type="hidden" name="_action" value="adjust_magazine" />
+                      <input type="hidden" name="magId" value={m.id} />
+                      <input type="hidden" name="delta" value="-50" />
+                      <button type="submit" class="btn btn-secondary btn-sm">−50</button>
+                    </form>
+                    <span style={`font-size:0.9rem;font-weight:800;min-width:3.5rem;text-align:center;color:${overdue ? '#f87171' : 'var(--text)'}`}>
+                      {m.roundCount.toLocaleString()}
+                      <span style="font-size:0.6rem;font-weight:400;color:var(--text-dim);display:block">rds</span>
+                    </span>
+                    <form method="POST">
+                      <input type="hidden" name="_action" value="adjust_magazine" />
+                      <input type="hidden" name="magId" value={m.id} />
+                      <input type="hidden" name="delta" value="50" />
+                      <button type="submit" class="btn btn-secondary btn-sm">+50</button>
+                    </form>
+                    <form method="POST">
+                      <input type="hidden" name="_action" value="delete_magazine" />
+                      <input type="hidden" name="magId" value={m.id} />
+                      <button type="submit" class="btn-delete">✕</button>
+                    </form>
+                  </div>
+                </div>
+                <details style="margin-top:0.5rem">
+                  <summary style="font-size:0.65rem;color:var(--text-dim);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:0.25rem">▸ Log spring replacement</summary>
+                  <form method="POST" style="display:flex;gap:0.5rem;align-items:center;margin-top:0.375rem;padding-top:0.375rem;border-top:1px solid var(--border)">
+                    <input type="hidden" name="_action" value="log_spring_replace" />
+                    <input type="hidden" name="magId" value={m.id} />
+                    <input name="date" type="date" value={new Date().toISOString().split('T')[0]} style="font-size:0.75rem;padding:0.25rem 0.5rem" />
+                    <button type="submit" class="btn btn-secondary btn-sm">Mark Replaced (resets count)</button>
+                  </form>
+                </details>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <details class="accordion">
+        <summary>+ Add Magazine</summary>
+        <form method="POST" class="form-section">
+          <input type="hidden" name="_action" value="add_magazine" />
+          <div class="form-row form-row-2">
+            <div><label>Label *</label><input name="label" type="text" required placeholder="OEM #1, Magpul #2…" /></div>
+            <div><label>Capacity</label><input name="capacity" type="number" min="1" placeholder="17" /></div>
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Spring Interval (rounds)</label><input name="springIntervalRounds" type="number" min="1" placeholder="e.g. 5000" /></div>
+            <div><label>Purchased Date</label><input name="purchasedDate" type="date" /></div>
+          </div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          <button type="submit" class="btn btn-primary">Add Magazine</button>
+        </form>
+      </details>
     </div>
 
     <!-- Log -->

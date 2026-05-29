@@ -112,6 +112,19 @@ sqlite.exec(`
     ammo_id INTEGER REFERENCES ammo_inventory(id)
   );
 
+  CREATE TABLE IF NOT EXISTS magazines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firearm_id INTEGER NOT NULL REFERENCES firearms(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    capacity INTEGER,
+    round_count INTEGER NOT NULL DEFAULT 0,
+    spring_interval_rounds INTEGER,
+    spring_replaced_date TEXT,
+    purchased_date TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS footage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
