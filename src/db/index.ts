@@ -171,6 +171,30 @@ sqlite.exec(`
     firearm_id INTEGER NOT NULL REFERENCES firearms(id) ON DELETE CASCADE,
     ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL
   );
+
+  CREATE TABLE IF NOT EXISTS dope_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firearm_id INTEGER NOT NULL REFERENCES firearms(id) ON DELETE CASCADE,
+    ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    zero_distance INTEGER,
+    zero_unit TEXT NOT NULL DEFAULT 'yards',
+    muzzle_velocity INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS dope_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL REFERENCES dope_cards(id) ON DELETE CASCADE,
+    distance INTEGER NOT NULL,
+    distance_unit TEXT NOT NULL DEFAULT 'yards',
+    elevation_moa REAL,
+    elevation_mrad REAL,
+    wind_moa REAL,
+    wind_mrad REAL,
+    notes TEXT
+  );
 `);
 
 // Column migrations for existing databases — safe to run on every startup

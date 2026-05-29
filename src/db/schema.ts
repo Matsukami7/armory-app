@@ -176,3 +176,27 @@ export const sessionTemplateFirearms = sqliteTable('session_template_firearms', 
   firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
   ammoId: integer('ammo_id').references(() => ammoInventory.id, { onDelete: 'set null' }),
 });
+
+export const dopeCards = sqliteTable('dope_cards', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
+  ammoId: integer('ammo_id').references(() => ammoInventory.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  zeroDistance: integer('zero_distance'),
+  zeroUnit: text('zero_unit').notNull().default('yards'), // yards | meters
+  muzzleVelocity: integer('muzzle_velocity'),             // fps
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const dopeEntries = sqliteTable('dope_entries', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  cardId: integer('card_id').notNull().references(() => dopeCards.id, { onDelete: 'cascade' }),
+  distance: integer('distance').notNull(),
+  distanceUnit: text('distance_unit').notNull().default('yards'), // yards | meters
+  elevationMoa: real('elevation_moa'),
+  elevationMrad: real('elevation_mrad'),
+  windMoa: real('wind_moa'),   // full value 10mph
+  windMrad: real('wind_mrad'),
+  notes: text('notes'),
+});

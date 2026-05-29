@@ -1,0 +1,386 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../db';
+import { dopeCards, dopeEntries, firearms, ammoInventory, accessories } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
+
+const cardId = parseInt(Astro.params.id!);
+if (isNaN(cardId)) return Astro.redirect('/firearms');
+
+const [card] = await db.select().from(dopeCards).where(eq(dopeCards.id, cardId));
+if (!card) return Astro.redirect('/firearms');
+
+const [gun]    = await db.select().from(firearms).where(eq(firearms.id, card.firearmId));
+const ammo     = card.ammoId ? (await db.select().from(ammoInventory).where(eq(ammoInventory.id, card.ammoId)))[0] : null;
+const optic    = (await db.select().from(accessories).where(eq(accessories.firearmId, card.firearmId))).find(a => a.type === 'optic') ?? null;
+const entries  = await db.select().from(dopeEntries).where(eq(dopeEntries.cardId, cardId)).orderBy(dopeEntries.distance);
+
+// Config from query params
+const unitMode = (Astro.url.searchParams.get('units') ?? 'both') as 'moa' | 'mrad' | 'both';
+const distMode = (Astro.url.searchParams.get('dist') ?? 'both') as 'yards' | 'meters' | 'both';
+const blankRows = Math.min(12, Math.max(0, parseInt(Astro.url.searchParams.get('blank') ?? '4')));
+
+const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+const YARDS_TO_METERS = 0.9144;
+function toMeters(yd: number) { return Math.round(yd * YARDS_TO_METERS); }
+function toYards(m: number)   { return Math.round(m / YARDS_TO_METERS); }
+
+function displayDistance(e: typeof entries[0]): string {
+  const yd = e.distanceUnit === 'meters' ? toYards(e.distance) : e.distance;
+  const m  = e.distanceUnit === 'yards'  ? toMeters(e.distance) : e.distance;
+  if (distMode === 'yards')  return `${yd}yd`;
+  if (distMode === 'meters') return `${m}m`;
+  return e.distanceUnit === 'yards' ? `${yd}yd / ${m}m` : `${m}m / ${yd}yd`;
+}
+
+const showMoa  = unitMode === 'moa'  || unitMode === 'both';
+const showMrad = unitMode === 'mrad' || unitMode === 'both';
+const elevCols = (showMoa ? 1 : 0) + (showMrad ? 1 : 0);
+const windCols = elevCols;
+---
+
+<Layout title={`DOPE — ${card.name}`} sub="Printable ballistic reference card">
+  <slot name="actions" slot="actions">
+    <button onclick="window.print()" class="btn btn-primary no-print">🖨 Print</button>
+    <a href={`/firearms/${gun.id}/dope`} class="btn btn-secondary no-print">← Back</a>
+  </slot>
+
+  <!-- Config panel -->
+  <div class="no-print" style="margin-bottom:1.5rem;max-width:52rem">
+    <form method="GET" class="card" style="padding:1.25rem">
+      <div class="form-section">
+        <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.75rem">Print Options</div>
+        <div class="form-row form-row-2" style="gap:1rem">
+          <div>
+            <label>Unit Display</label>
+            <select name="units" onchange="this.form.requestSubmit()">
+              <option value="both"  selected={unitMode === 'both'}>Both (MOA + MRAD)</option>
+              <option value="moa"   selected={unitMode === 'moa'}>MOA only</option>
+              <option value="mrad"  selected={unitMode === 'mrad'}>MRAD only</option>
+            </select>
+          </div>
+          <div>
+            <label>Distance Display</label>
+            <select name="dist" onchange="this.form.requestSubmit()">
+              <option value="both"   selected={distMode === 'both'}>Both (yards + meters)</option>
+              <option value="yards"  selected={distMode === 'yards'}>Yards only</option>
+              <option value="meters" selected={distMode === 'meters'}>Meters only</option>
+            </select>
+          </div>
+          <div>
+            <label>Blank rows to append</label>
+            <select name="blank" onchange="this.form.requestSubmit()">
+              {[0,2,4,6,8,10,12].map(n => <option value={n} selected={blankRows === n}>{n}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Printable card -->
+  <div class="dope-card" id="dope-card">
+
+    <!-- Header -->
+    <div class="dc-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem">
+        <div>
+          <div class="dc-brand">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+            ARMORY — DOPE CARD
+          </div>
+          <div class="dc-card-name">{card.name}</div>
+        </div>
+        <div class="dc-date">{today}</div>
+      </div>
+
+      <!-- Rifle + ammo info grid -->
+      <div class="dc-info-grid">
+        <div class="dc-info-cell">
+          <div class="dc-info-label">RIFLE</div>
+          <div class="dc-info-value">{gun.name}</div>
+        </div>
+        <div class="dc-info-cell">
+          <div class="dc-info-label">MAKE / MODEL</div>
+          <div class="dc-info-value">{gun.make} {gun.model}{gun.generation ? ` ${gun.generation}` : ''}</div>
+        </div>
+        <div class="dc-info-cell">
+          <div class="dc-info-label">CALIBER</div>
+          <div class="dc-info-value">{gun.caliber}</div>
+        </div>
+        {ammo ? (
+          <>
+            <div class="dc-info-cell">
+              <div class="dc-info-label">AMMO</div>
+              <div class="dc-info-value">{ammo.brand}{ammo.grain ? ` ${ammo.grain}gr` : ''} {ammo.type}</div>
+            </div>
+            {ammo.costPerRound && (
+              <div class="dc-info-cell">
+                <div class="dc-info-label">COST/RD</div>
+                <div class="dc-info-value">${ammo.costPerRound.toFixed(3)}</div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div class="dc-info-cell">
+            <div class="dc-info-label">AMMO</div>
+            <div class="dc-info-value" style="color:#666">—</div>
+          </div>
+        )}
+        {card.zeroDistance && (
+          <div class="dc-info-cell">
+            <div class="dc-info-label">ZERO</div>
+            <div class="dc-info-value">{card.zeroDistance}{card.zeroUnit === 'meters' ? 'm' : 'yd'}</div>
+          </div>
+        )}
+        {card.muzzleVelocity && (
+          <div class="dc-info-cell">
+            <div class="dc-info-label">MV (fps)</div>
+            <div class="dc-info-value">{card.muzzleVelocity}</div>
+          </div>
+        )}
+        {optic && (
+          <div class="dc-info-cell">
+            <div class="dc-info-label">OPTIC</div>
+            <div class="dc-info-value">{optic.make ? `${optic.make} ` : ''}{optic.model ?? optic.name}</div>
+          </div>
+        )}
+        {optic?.zeroData && (
+          <div class="dc-info-cell" style="grid-column:span 2">
+            <div class="dc-info-label">ZERO DATA</div>
+            <div class="dc-info-value">{optic.zeroData}</div>
+          </div>
+        )}
+      </div>
+      {card.notes && <div class="dc-card-notes">{card.notes}</div>}
+    </div>
+
+    <!-- DOPE table -->
+    <div class="dc-section-title">DATA ON PREVIOUS ENGAGEMENTS</div>
+    <table class="dc-table">
+      <thead>
+        <tr>
+          <th rowspan="2" style="width:14%">DIST</th>
+          <th colspan={elevCols} style="border-bottom:1px solid #ccc">ELEVATION ↑</th>
+          <th colspan={windCols} style="border-bottom:1px solid #ccc">WIND → (10mph FV)</th>
+          <th rowspan="2">NOTES</th>
+        </tr>
+        <tr>
+          {showMoa  && <th>MOA</th>}
+          {showMrad && <th>MRAD</th>}
+          {showMoa  && <th>MOA</th>}
+          {showMrad && <th>MRAD</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map(e => (
+          <tr>
+            <td class="dc-prefill dc-dist">{displayDistance(e)}</td>
+            {showMoa  && <td class="dc-prefill dc-center">{e.elevationMoa  != null ? e.elevationMoa  : ''}</td>}
+            {showMrad && <td class="dc-prefill dc-center">{e.elevationMrad != null ? e.elevationMrad : ''}</td>}
+            {showMoa  && <td class="dc-prefill dc-center">{e.windMoa  != null ? e.windMoa  : ''}</td>}
+            {showMrad && <td class="dc-prefill dc-center">{e.windMrad != null ? e.windMrad : ''}</td>}
+            <td class="dc-prefill dc-notes-cell">{e.notes ?? ''}</td>
+          </tr>
+        ))}
+        {Array.from({ length: blankRows }).map(() => (
+          <tr>
+            <td></td>
+            {showMoa  && <td></td>}
+            {showMrad && <td></td>}
+            {showMoa  && <td></td>}
+            {showMrad && <td></td>}
+            <td></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <!-- Environmental corrections -->
+    <div class="dc-section-title" style="margin-top:0.625rem">ENVIRONMENTAL CORRECTIONS</div>
+    <table class="dc-table">
+      <thead>
+        <tr>
+          <th style="width:20%">CONDITION</th>
+          <th style="width:25%">VALUE</th>
+          <th style="width:25%">ELEV ADJ</th>
+          <th>NOTES</th>
+        </tr>
+      </thead>
+      <tbody>
+        {['Temp (+10°F)', 'Altitude (+1000ft)', 'DA (high)', 'Humidity'].map(cond => (
+          <tr><td class="dc-dim">{cond}</td><td></td><td></td><td></td></tr>
+        ))}
+      </tbody>
+    </table>
+
+    <!-- Field notes -->
+    <div class="dc-section-title" style="margin-top:0.625rem">FIELD NOTES</div>
+    <div class="dc-notes-block">
+      {Array.from({ length: 5 }).map(() => <div class="dc-note-line"></div>)}
+    </div>
+
+    <div class="dc-footer">
+      {gun.name} · {gun.caliber} · {card.name} · Generated {today} via Armory
+    </div>
+  </div>
+</Layout>
+
+<style>
+.dope-card {
+  max-width: 52rem;
+  background: #fff;
+  color: #000;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.dc-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #000;
+  margin-bottom: 0.2rem;
+}
+
+.dc-card-name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: 0.01em;
+}
+
+.dc-date {
+  font-size: 0.6rem;
+  color: #666;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dc-header {
+  border-bottom: 2px solid #000;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.dc-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.375rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.dc-info-cell { }
+
+.dc-info-label {
+  font-size: 0.45rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+}
+
+.dc-info-value {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #000;
+}
+
+.dc-card-notes {
+  font-size: 0.62rem;
+  color: #555;
+  margin-top: 0.375rem;
+  font-style: italic;
+}
+
+.dc-section-title {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom: 1.5px solid #000;
+  padding-bottom: 0.15rem;
+  margin-bottom: 0;
+}
+
+.dc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.68rem;
+}
+
+.dc-table th {
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  border: 1px solid #000;
+  padding: 0.2rem 0.3rem;
+  background: #f0f0f0;
+  text-transform: uppercase;
+}
+
+.dc-table td {
+  border: 1px solid #000;
+  padding: 0.15rem 0.3rem;
+  height: 1.5rem;
+  vertical-align: middle;
+}
+
+.dc-prefill { font-weight: 600; color: #000; }
+.dc-dist    { font-weight: 700; white-space: nowrap; }
+.dc-center  { text-align: center; }
+.dc-notes-cell { font-size: 0.6rem; color: #444; }
+.dc-dim     { color: #666; font-size: 0.6rem; }
+
+.dc-notes-block {
+  border: 1px solid #000;
+  border-top: none;
+}
+
+.dc-note-line {
+  height: 1.5rem;
+  border-top: 1px solid #ccc;
+}
+
+.dc-note-line:first-child { border-top: none; }
+
+.dc-footer {
+  margin-top: 0.5rem;
+  font-size: 0.5rem;
+  color: #888;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+@media print {
+  .no-print,
+  .sidebar, .bottom-nav, .page-header, .pw-warning { display: none !important; }
+
+  body, html { background: #fff !important; }
+  .app-shell { display: block !important; }
+  .main-area { padding: 0 !important; margin: 0 !important; overflow: visible !important; }
+  .page-content { padding: 0 !important; }
+
+  .dope-card {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0.4in 0.5in !important;
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  @page { size: letter portrait; margin: 0; }
+}
+</style>

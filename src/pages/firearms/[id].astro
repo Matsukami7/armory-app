@@ -207,6 +207,7 @@ const hasCleaningInterval = gun.serviceIntervalRounds != null || gun.cleanInterv
 
 <Layout title={gun.name} sub={`${gun.make} ${gun.model}${gun.generation ? ` ${gun.generation}` : ''} · ${gun.caliber}`} backHref="/firearms">
   <slot name="actions" slot="actions">
+    <a href={`/firearms/${id}/dope`} class="btn btn-secondary">🎯 DOPE</a>
     <a href={`/firearms/${id}/edit`} class="btn btn-secondary">Edit</a>
   </slot>
 

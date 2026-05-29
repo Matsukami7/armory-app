@@ -1,0 +1,228 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../db';
+import { firearms, ammoInventory, dopeCards, dopeEntries, accessories } from '../../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+
+const id = parseInt(Astro.params.id!);
+if (isNaN(id)) return Astro.redirect('/firearms');
+
+const [gun] = await db.select().from(firearms).where(eq(firearms.id, id));
+if (!gun) return Astro.redirect('/firearms');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'create_card') {
+    await db.insert(dopeCards).values({
+      firearmId:      id,
+      ammoId:         form.get('ammoId') ? parseInt(form.get('ammoId') as string) : null,
+      name:           form.get('name') as string,
+      zeroDistance:   form.get('zeroDistance') ? parseInt(form.get('zeroDistance') as string) : null,
+      zeroUnit:       form.get('zeroUnit') as string || 'yards',
+      muzzleVelocity: form.get('muzzleVelocity') ? parseInt(form.get('muzzleVelocity') as string) : null,
+      notes:          form.get('notes') as string || null,
+    });
+    return Astro.redirect(`/firearms/${id}/dope`);
+  }
+
+  if (action === 'delete_card') {
+    await db.delete(dopeCards).where(eq(dopeCards.id, parseInt(form.get('cardId') as string)));
+    return Astro.redirect(`/firearms/${id}/dope`);
+  }
+
+  if (action === 'add_entry') {
+    await db.insert(dopeEntries).values({
+      cardId:        parseInt(form.get('cardId') as string),
+      distance:      parseInt(form.get('distance') as string),
+      distanceUnit:  form.get('distanceUnit') as string || 'yards',
+      elevationMoa:  form.get('elevationMoa')  ? parseFloat(form.get('elevationMoa') as string)  : null,
+      elevationMrad: form.get('elevationMrad') ? parseFloat(form.get('elevationMrad') as string) : null,
+      windMoa:       form.get('windMoa')       ? parseFloat(form.get('windMoa') as string)       : null,
+      windMrad:      form.get('windMrad')      ? parseFloat(form.get('windMrad') as string)      : null,
+      notes:         form.get('notes') as string || null,
+    });
+    return Astro.redirect(`/firearms/${id}/dope`);
+  }
+
+  if (action === 'delete_entry') {
+    await db.delete(dopeEntries).where(eq(dopeEntries.id, parseInt(form.get('entryId') as string)));
+    return Astro.redirect(`/firearms/${id}/dope`);
+  }
+}
+
+const allAmmo   = await db.select().from(ammoInventory).orderBy(ammoInventory.caliber);
+const optics    = await db.select().from(accessories).where(eq(accessories.firearmId, id));
+const cards     = await db.select().from(dopeCards).where(eq(dopeCards.firearmId, id)).orderBy(desc(dopeCards.createdAt));
+
+const cardRows = await Promise.all(cards.map(async card => {
+  const entries = await db.select().from(dopeEntries).where(eq(dopeEntries.cardId, card.id)).orderBy(dopeEntries.distance);
+  const ammo    = card.ammoId ? allAmmo.find(a => a.id === card.ammoId) : null;
+  return { ...card, entries, ammo };
+}));
+---
+
+<Layout title={`DOPE — ${gun.name}`} sub="Ballistic data cards" backHref={`/firearms/${id}`}>
+  <slot name="actions" slot="actions">
+    <a href={`/firearms/${id}`} class="btn btn-secondary">← Back</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:2rem;max-width:56rem">
+
+    <!-- Existing cards -->
+    {cardRows.map(card => (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◈</span>
+          <span class="section-title">{card.name}</span>
+          {card.ammo && <span class="pill pill-default" style="margin-left:0.5rem;font-size:0.68rem">{card.ammo.brand} {card.ammo.grain ? `${card.ammo.grain}gr ` : ''}{card.ammo.caliber}</span>}
+          <div style="margin-left:auto;display:flex;gap:0.5rem">
+            <a href={`/dope/${card.id}/print`} class="btn btn-primary" style="font-size:0.72rem;padding:0.25rem 0.75rem" target="_blank">🖨 Print Card</a>
+            <form method="POST" onsubmit="return confirm('Delete this DOPE card?')">
+              <input type="hidden" name="_action" value="delete_card" />
+              <input type="hidden" name="cardId" value={card.id} />
+              <button type="submit" class="btn-delete">✕</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Card meta -->
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;padding:0 0.25rem">
+          {card.zeroDistance && <span>Zero: <strong style="color:var(--text)">{card.zeroDistance}{card.zeroUnit === 'meters' ? 'm' : 'yd'}</strong></span>}
+          {card.muzzleVelocity && <span>MV: <strong style="color:var(--text)">{card.muzzleVelocity} fps</strong></span>}
+          {card.notes && <span>{card.notes}</span>}
+        </div>
+
+        <!-- Entries table -->
+        <div class="card" style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.8rem;min-width:480px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);white-space:nowrap">Distance</th>
+                <th style="text-align:center;padding:0.5rem 0.75rem;font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)" colspan="2">Elevation</th>
+                <th style="text-align:center;padding:0.5rem 0.75rem;font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)" colspan="2">Wind (10mph FV)</th>
+                <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Notes</th>
+                <th style="width:2rem"></th>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-hover)">
+                <th></th>
+                <th style="text-align:center;padding:0.25rem 0.5rem;font-size:0.65rem;color:var(--text-dim)">MOA</th>
+                <th style="text-align:center;padding:0.25rem 0.5rem;font-size:0.65rem;color:var(--text-dim)">MRAD</th>
+                <th style="text-align:center;padding:0.25rem 0.5rem;font-size:0.65rem;color:var(--text-dim)">MOA</th>
+                <th style="text-align:center;padding:0.25rem 0.5rem;font-size:0.65rem;color:var(--text-dim)">MRAD</th>
+                <th></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {card.entries.map(e => (
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:0.5rem 0.75rem;font-weight:700;color:var(--text);white-space:nowrap">
+                    {e.distance}{e.distanceUnit === 'meters' ? 'm' : 'yd'}
+                  </td>
+                  <td style="padding:0.5rem 0.5rem;text-align:center;color:var(--accent);font-weight:600">{e.elevationMoa != null ? e.elevationMoa : '—'}</td>
+                  <td style="padding:0.5rem 0.5rem;text-align:center;color:var(--accent);font-weight:600">{e.elevationMrad != null ? e.elevationMrad : '—'}</td>
+                  <td style="padding:0.5rem 0.5rem;text-align:center;color:var(--text-muted)">{e.windMoa != null ? e.windMoa : '—'}</td>
+                  <td style="padding:0.5rem 0.5rem;text-align:center;color:var(--text-muted)">{e.windMrad != null ? e.windMrad : '—'}</td>
+                  <td style="padding:0.5rem 0.75rem;color:var(--text-muted);font-size:0.72rem">{e.notes ?? ''}</td>
+                  <td style="padding:0.5rem 0.5rem">
+                    <form method="POST">
+                      <input type="hidden" name="_action" value="delete_entry" />
+                      <input type="hidden" name="entryId" value={e.id} />
+                      <button type="submit" class="btn-delete">✕</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+              {card.entries.length === 0 && (
+                <tr><td colspan="7" style="padding:1rem;text-align:center;color:var(--text-dim);font-size:0.8rem">No entries yet — add a distance below</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Add entry -->
+        <details class="accordion" style="margin-top:0.5rem">
+          <summary>+ Add Distance Entry</summary>
+          <form method="POST" class="form-section">
+            <input type="hidden" name="_action" value="add_entry" />
+            <input type="hidden" name="cardId" value={card.id} />
+            <div class="form-row form-row-2">
+              <div><label>Distance *</label><input name="distance" type="number" min="1" required placeholder="300" /></div>
+              <div>
+                <label>Unit</label>
+                <select name="distanceUnit">
+                  <option value="yards">Yards</option>
+                  <option value="meters">Meters</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem">
+              <div><label>Elev (MOA)</label><input name="elevationMoa" type="number" step="0.1" placeholder="—" /></div>
+              <div><label>Elev (MRAD)</label><input name="elevationMrad" type="number" step="0.01" placeholder="—" /></div>
+              <div><label>Wind MOA <span style="font-size:0.65rem;opacity:0.7">10mph FV</span></label><input name="windMoa" type="number" step="0.1" placeholder="—" /></div>
+              <div><label>Wind MRAD <span style="font-size:0.65rem;opacity:0.7">10mph FV</span></label><input name="windMrad" type="number" step="0.01" placeholder="—" /></div>
+            </div>
+            <div><label>Notes</label><input name="notes" type="text" placeholder="Optional — special conditions, etc." /></div>
+            <button type="submit" class="btn btn-primary">Add Entry</button>
+          </form>
+        </details>
+      </div>
+    ))}
+
+    <!-- Create new card -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">+</span>
+        <span class="section-title">New DOPE Card</span>
+      </div>
+      <form method="POST" class="card" style="padding:1.5rem">
+        <input type="hidden" name="_action" value="create_card" />
+        <div class="form-section">
+          <div class="form-row form-row-2">
+            <div><label>Card Name *</label><input name="name" type="text" required placeholder="e.g. 77gr SMK — 100yd zero" /></div>
+            <div>
+              <label>Ammo Load</label>
+              <select name="ammoId">
+                <option value="">— None / Generic —</option>
+                {allAmmo.filter(a => a.caliber === gun.caliber).map(a => (
+                  <option value={a.id}>{a.brand} {a.grain ? `${a.grain}gr ` : ''}{a.type}</option>
+                ))}
+                {allAmmo.filter(a => a.caliber !== gun.caliber).length > 0 && (
+                  <>
+                    <option disabled>── other calibers ──</option>
+                    {allAmmo.filter(a => a.caliber !== gun.caliber).map(a => (
+                      <option value={a.id}>{a.brand} {a.grain ? `${a.grain}gr ` : ''}{a.caliber}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem">
+            <div><label>Zero Distance</label><input name="zeroDistance" type="number" min="1" placeholder="100" /></div>
+            <div>
+              <label>Zero Unit</label>
+              <select name="zeroUnit">
+                <option value="yards">Yards</option>
+                <option value="meters">Meters</option>
+              </select>
+            </div>
+            <div><label>Muzzle Velocity (fps)</label><input name="muzzleVelocity" type="number" min="1" placeholder="2700" /></div>
+          </div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="Barrel length, temperature, scope model…" /></div>
+          <button type="submit" class="btn btn-primary">Create Card</button>
+        </div>
+      </form>
+    </div>
+
+    {cardRows.length === 0 && (
+      <div class="empty-state" style="margin-top:-1rem">
+        <div class="empty-state-icon">🎯</div>
+        <div class="empty-state-text">Create a DOPE card to start recording ballistic data for {gun.name}.</div>
+      </div>
+    )}
+
+  </div>
+</Layout>
