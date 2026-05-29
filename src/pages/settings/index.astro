@@ -94,14 +94,71 @@ const usingDefault = (process.env.ARMORY_PASSWORD ?? 'changeme') === 'changeme';
       </div>
     </div>
 
-    <!-- About -->
-    <div class="card" style="padding:1.25rem">
+    <!-- About / Update check -->
+    <div class="card" style="padding:1.25rem" id="about-card">
       <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem">About</div>
-      <div style="font-size:0.8125rem;color:var(--text-muted);line-height:1.6">
+      <div style="font-size:0.8125rem;color:var(--text-muted);line-height:1.6;margin-bottom:0.75rem">
         Armory — self-hosted firearms tracker.<br />
         <a href="https://github.com/Matsukami7/armory-app" target="_blank" style="color:var(--accent)">github.com/Matsukami7/armory-app</a>
+      </div>
+      <div id="version-row" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+        <span id="version-sha" style="font-size:0.7rem;color:var(--text-dim);font-family:ui-monospace,monospace"></span>
+        <span id="update-badge" style="display:none"></span>
       </div>
     </div>
 
   </div>
 </Layout>
+
+<script>
+const CURRENT_SHA: string = import.meta.env.PUBLIC_GIT_SHA ?? 'unknown';
+const CACHE_KEY = 'armory_update_check';
+const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+const shaEl = document.getElementById('version-sha')!;
+const badgeEl = document.getElementById('update-badge')!;
+
+if (CURRENT_SHA === 'unknown') {
+  shaEl.textContent = 'dev build';
+} else {
+  shaEl.textContent = `sha: ${CURRENT_SHA.slice(0, 7)}`;
+
+  async function checkForUpdate() {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { sha, ts } = JSON.parse(cached);
+      if (Date.now() - ts < CACHE_TTL) {
+        showResult(sha);
+        return;
+      }
+    }
+    try {
+      const res = await fetch('https://api.github.com/repos/Matsukami7/armory-app/commits/master', {
+        headers: { Accept: 'application/vnd.github.sha' },
+      });
+      if (!res.ok) return;
+      const latestSha = (await res.text()).trim();
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ sha: latestSha, ts: Date.now() }));
+      showResult(latestSha);
+    } catch {
+      // silently fail — update check is best-effort
+    }
+  }
+
+  function showResult(latestSha: string) {
+    if (latestSha && !latestSha.startsWith(CURRENT_SHA.slice(0, 7)) && !CURRENT_SHA.startsWith(latestSha.slice(0, 7))) {
+      badgeEl.style.display = 'inline-flex';
+      badgeEl.innerHTML = `
+        <span style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;border-radius:0.375rem;padding:0.2rem 0.625rem;font-size:0.7rem;font-weight:600;display:inline-flex;align-items:center;gap:0.375rem">
+          ↑ Update available —
+          <a href="https://github.com/Matsukami7/armory-app" target="_blank" style="color:#f59e0b;text-decoration:underline">view changelog</a>
+        </span>`;
+    } else {
+      badgeEl.style.display = 'inline-flex';
+      badgeEl.innerHTML = `<span style="font-size:0.7rem;color:#22c55e">✓ Up to date</span>`;
+    }
+  }
+
+  checkForUpdate();
+}
+</script>

@@ -6,6 +6,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM base AS builder
+ARG GIT_SHA=unknown
+ENV PUBLIC_GIT_SHA=$GIT_SHA
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
