@@ -109,6 +109,17 @@ export const sessionFirearms = sqliteTable('session_firearms', {
   ammoId: integer('ammo_id').references(() => ammoInventory.id),
 });
 
+export const footage = sqliteTable('footage', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  date: text('date').notNull(),
+  path: text('path'),          // upload path (null if external)
+  externalUrl: text('external_url'), // YouTube/Vimeo/etc URL (null if uploaded)
+  sessionId: integer('session_id').references(() => rangeSessions.id, { onDelete: 'set null' }),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
 export const drills = sqliteTable('drills', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   sessionId: integer('session_id').notNull().references(() => rangeSessions.id, { onDelete: 'cascade' }),

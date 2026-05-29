@@ -112,6 +112,17 @@ sqlite.exec(`
     ammo_id INTEGER REFERENCES ammo_inventory(id)
   );
 
+  CREATE TABLE IF NOT EXISTS footage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    date TEXT NOT NULL,
+    path TEXT,
+    external_url TEXT,
+    session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS drills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL REFERENCES range_sessions(id) ON DELETE CASCADE,

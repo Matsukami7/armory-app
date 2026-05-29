@@ -1,0 +1,190 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { footage, rangeSessions } from '../../db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
+import { saveUpload } from '../../lib/uploads';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'add') {
+    const file = form.get('file') as File | null;
+    const externalUrl = form.get('externalUrl') as string || null;
+    const sessionId = form.get('sessionId') ? parseInt(form.get('sessionId') as string) : null;
+
+    let path: string | null = null;
+    if (file && file.size > 0) {
+      path = await saveUpload(file, 'footage');
+    }
+
+    if (path || externalUrl) {
+      await db.insert(footage).values({
+        title:       form.get('title') as string,
+        date:        form.get('date') as string,
+        path,
+        externalUrl,
+        sessionId:   isNaN(sessionId!) ? null : sessionId,
+        notes:       form.get('notes') as string || null,
+      });
+    }
+  }
+
+  if (action === 'delete') {
+    await db.delete(footage).where(eq(footage.id, parseInt(form.get('id') as string)));
+  }
+
+  return Astro.redirect('/footage');
+}
+
+const allFootage = await db
+  .select({ v: footage, sessionDate: rangeSessions.date })
+  .from(footage)
+  .leftJoin(rangeSessions, eq(footage.sessionId, rangeSessions.id))
+  .orderBy(desc(footage.date));
+
+const allSessions = await db.select({ id: rangeSessions.id, date: rangeSessions.date, location: rangeSessions.location })
+  .from(rangeSessions).orderBy(desc(rangeSessions.date));
+
+const today = new Date().toISOString().split('T')[0];
+
+function embedUrl(url: string): string | null {
+  // YouTube
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  // Vimeo
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+  return null;
+}
+---
+
+<Layout title="Footage" sub="Range videos & recordings">
+  <slot name="actions" slot="actions">
+    <a href="#add-footage" class="btn btn-primary" onclick="document.getElementById('add-footage').open=true">+ Add Footage</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:56rem">
+
+    {allFootage.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">🎬</div>
+        <div class="empty-state-text">Upload range videos, drill clips, or link body cam / helmet cam footage.</div>
+      </div>
+    )}
+
+    {allFootage.length > 0 && (
+      <div style="display:flex;flex-direction:column;gap:1.25rem">
+        {allFootage.map(({ v, sessionDate }) => {
+          const embed = v.externalUrl ? embedUrl(v.externalUrl) : null;
+          return (
+            <div class="card" style="padding:1.25rem;display:flex;flex-direction:column;gap:0.875rem">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
+                <div>
+                  <div style="font-size:1rem;font-weight:700;color:var(--text)">{v.title}</div>
+                  <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
+                    {v.date}
+                    {sessionDate && <span> · <a href={`/sessions/${v.sessionId}`} style="color:var(--accent);text-decoration:none">Session {sessionDate}</a></span>}
+                  </div>
+                  {v.notes && <div style="font-size:0.8125rem;color:var(--text-muted);margin-top:0.375rem">{v.notes}</div>}
+                </div>
+                <form method="POST" onsubmit="return confirm('Delete this footage entry?')">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={v.id} />
+                  <button type="submit" class="btn-delete">✕</button>
+                </form>
+              </div>
+
+              {/* Uploaded video */}
+              {v.path && (
+                <video
+                  controls
+                  preload="metadata"
+                  style="width:100%;max-height:28rem;border-radius:0.375rem;background:#000;display:block"
+                >
+                  <source src={v.path} />
+                  Your browser doesn't support video playback.
+                </video>
+              )}
+
+              {/* YouTube / Vimeo embed */}
+              {v.externalUrl && embed && (
+                <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:0.375rem;overflow:hidden">
+                  <iframe
+                    src={embed}
+                    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen
+                  />
+                </div>
+              )}
+
+              {/* External link (non-embeddable) */}
+              {v.externalUrl && !embed && (
+                <a href={v.externalUrl} target="_blank" rel="noopener"
+                   style="display:inline-flex;align-items:center;gap:0.5rem;font-size:0.875rem;color:var(--accent);text-decoration:none;padding:0.625rem 1rem;border:1px solid var(--border);border-radius:0.375rem;width:fit-content">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Watch on external site →
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    )}
+
+    <!-- Add form -->
+    <details class="accordion" id="add-footage">
+      <summary>+ Add Footage</summary>
+      <form method="POST" enctype="multipart/form-data" class="form-section">
+        <input type="hidden" name="_action" value="add" />
+
+        <div class="form-row form-row-2">
+          <div><label>Title *</label><input name="title" type="text" required placeholder="USPSA Practice — classifier runs" /></div>
+          <div><label>Date *</label><input name="date" type="date" required value={today} /></div>
+        </div>
+
+        <div>
+          <label>Link to Session</label>
+          <select name="sessionId">
+            <option value="">None</option>
+            {allSessions.map(s => (
+              <option value={s.id}>{s.date}{s.location ? ` — ${s.location}` : ''}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:0.5rem;padding:1rem;display:flex;flex-direction:column;gap:0.75rem">
+          <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted)">Video Source — pick one</div>
+
+          <div>
+            <label>Upload Video File</label>
+            <input name="file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv" />
+            <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.25rem">mp4, mov, webm, mkv — stored in data/uploads/footage/</div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:0.75rem;color:var(--text-dim);font-size:0.75rem">
+            <div style="flex:1;height:1px;background:var(--border)"></div>
+            or
+            <div style="flex:1;height:1px;background:var(--border)"></div>
+          </div>
+
+          <div>
+            <label>External URL</label>
+            <input name="externalUrl" type="url" placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..." />
+            <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.25rem">YouTube and Vimeo links will be embedded automatically</div>
+          </div>
+        </div>
+
+        <div><label>Notes</label><textarea name="notes" rows="2" placeholder="GoPro Hero 12, front mount. 2-gun match, stage 3 and 4."></textarea></div>
+
+        <button type="submit" class="btn btn-primary">Add Footage</button>
+      </form>
+    </details>
+
+  </div>
+</Layout>

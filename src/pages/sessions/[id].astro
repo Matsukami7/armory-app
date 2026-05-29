@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { rangeSessions, sessionFirearms, firearms, ammoInventory, drills } from '../../db/schema';
+import { rangeSessions, sessionFirearms, firearms, ammoInventory, drills, footage } from '../../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { saveUpload } from '../../lib/uploads';
 import { parseTags, serializeTags, tagColor } from '../../lib/tags';
@@ -59,6 +59,19 @@ if (Astro.request.method === 'POST') {
     const updated = parseTags(session.tags).filter(t => t !== tag);
     await db.update(rangeSessions).set({ tags: serializeTags(updated) }).where(eq(rangeSessions.id, id));
   }
+  if (action === 'add_clip') {
+    const file = form.get('file') as File | null;
+    const title = form.get('title') as string || `Session ${session.date} clip`;
+    if (file && file.size > 0) {
+      const path = await saveUpload(file, 'footage');
+      if (path) {
+        await db.insert(footage).values({ title, date: session.date, path, sessionId: id, notes: form.get('notes') as string || null });
+      }
+    }
+  }
+  if (action === 'delete_clip') {
+    await db.delete(footage).where(eq(footage.id, parseInt(form.get('clipId') as string)));
+  }
   if (action === 'upload_target') {
     const file = form.get('photo') as File | null;
     const drillId = parseInt(form.get('drillId') as string);
@@ -78,6 +91,7 @@ const sessionGuns = await db
   .where(eq(sessionFirearms.sessionId, id));
 
 const sessionDrills = await db.select().from(drills).where(eq(drills.sessionId, id));
+const sessionClips  = await db.select().from(footage).where(eq(footage.sessionId, id));
 const allFirearms   = await db.select().from(firearms);
 const allAmmo       = await db.select().from(ammoInventory);
 const totalRounds   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired, 0);
@@ -288,6 +302,51 @@ const sessionCost   = sessionGuns.reduce((s, r) => s + r.sf.roundsFired * (r.a?.
           </div>
           <div><label>Notes</label><textarea name="notes" rows="2" placeholder="Observations, what to work on..."></textarea></div>
           <button type="submit" class="btn btn-primary">Add Drill</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Video Clips -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">▶</span>
+        <span class="section-title">Video Clips</span>
+        {sessionClips.length > 0 && (
+          <a href="/footage" style="margin-left:auto;font-size:0.7rem;color:var(--accent);text-decoration:none;opacity:0.8">All Footage →</a>
+        )}
+      </div>
+      {sessionClips.length > 0 && (
+        <div style="display:flex;flex-direction:column;gap:0.875rem;margin-bottom:0.75rem">
+          {sessionClips.map(clip => (
+            <div class="card" style="padding:1rem">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.625rem">
+                <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{clip.title}</div>
+                <form method="POST" onsubmit="return confirm('Remove this clip?')">
+                  <input type="hidden" name="_action" value="delete_clip" />
+                  <input type="hidden" name="clipId" value={clip.id} />
+                  <button type="submit" class="btn-delete">✕</button>
+                </form>
+              </div>
+              {clip.notes && <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem">{clip.notes}</div>}
+              <video controls preload="metadata" style="width:100%;max-height:20rem;border-radius:0.25rem;background:#000;display:block">
+                <source src={clip.path!} />
+              </video>
+            </div>
+          ))}
+        </div>
+      )}
+      <details class="accordion">
+        <summary>+ Upload Clip</summary>
+        <form method="POST" enctype="multipart/form-data" class="form-section">
+          <input type="hidden" name="_action" value="add_clip" />
+          <div><label>Title</label><input name="title" type="text" placeholder={`Session ${session.date} clip`} /></div>
+          <div>
+            <label>Video File *</label>
+            <input name="file" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" required />
+            <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.25rem">mp4, mov, webm — for large body cam recordings use the Footage library</div>
+          </div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          <button type="submit" class="btn btn-primary">Upload Clip</button>
         </form>
       </details>
     </div>

@@ -1,7 +1,7 @@
 import { resolve, join, extname } from 'path';
 import { mkdirSync, writeFileSync } from 'fs';
 
-const ALLOWED_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic']);
+const ALLOWED_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.mp4', '.mov', '.webm', '.mkv']);
 
 export function getUploadsDir(): string {
   const dbPath = process.env.DB_PATH ?? resolve(process.cwd(), 'data/armory.db');
