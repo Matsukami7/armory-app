@@ -1,0 +1,108 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { db } from '../db';
+import { firearms, rangeSessions, ammoInventory, gear, drills } from '../db/schema';
+import { sql, eq } from 'drizzle-orm';
+
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+
+type Result = { type: string; label: string; sub: string; href: string };
+const results: Result[] = [];
+
+if (q.length >= 2) {
+  const like = `%${q}%`;
+
+  const guns = await db.select().from(firearms).where(
+    sql`name LIKE ${like} OR make LIKE ${like} OR model LIKE ${like} OR caliber LIKE ${like} OR serial LIKE ${like} OR notes LIKE ${like}`
+  );
+  for (const g of guns) {
+    results.push({ type: 'Firearm', label: g.name, sub: `${g.make} ${g.model} · ${g.caliber}`, href: `/firearms/${g.id}` });
+  }
+
+  const sessions = await db.select().from(rangeSessions).where(
+    sql`date LIKE ${like} OR location LIKE ${like} OR notes LIKE ${like} OR weather LIKE ${like}`
+  ).orderBy(sql`date DESC`).limit(10);
+  for (const s of sessions) {
+    results.push({ type: 'Session', label: s.date, sub: s.location ?? 'No location', href: `/sessions/${s.id}` });
+  }
+
+  const ammo = await db.select().from(ammoInventory).where(
+    sql`caliber LIKE ${like} OR brand LIKE ${like} OR type LIKE ${like} OR notes LIKE ${like}`
+  );
+  for (const a of ammo) {
+    results.push({ type: 'Ammo', label: `${a.brand} ${a.grain ? `${a.grain}gr ` : ''}${a.caliber}`, sub: `${a.type} · ${a.quantity.toLocaleString()} rds`, href: `/ammo/${a.id}/edit` });
+  }
+
+  const gearItems = await db.select().from(gear).where(
+    sql`name LIKE ${like} OR category LIKE ${like} OR notes LIKE ${like}`
+  );
+  for (const g of gearItems) {
+    results.push({ type: 'Gear', label: g.name, sub: `${g.category} · ${g.quantity} ${g.unit}`, href: `/gear` });
+  }
+
+  const drillItems = await db.select().from(drills).where(
+    sql`name LIKE ${like} OR notes LIKE ${like} OR score LIKE ${like} OR distance LIKE ${like}`
+  ).limit(10);
+  for (const d of drillItems) {
+    results.push({ type: 'Drill', label: d.name, sub: [d.distance, d.score].filter(Boolean).join(' · '), href: `/sessions/${d.sessionId}` });
+  }
+}
+
+const typeColor: Record<string, string> = {
+  Firearm: 'var(--accent)',
+  Session: '#a855f7',
+  Ammo:    '#f97316',
+  Gear:    '#22c55e',
+  Drill:   '#f59e0b',
+};
+---
+
+<Layout title="Search" sub={q ? `${results.length} result${results.length !== 1 ? 's' : ''} for "${q}"` : 'Search everything'}>
+  <div style="max-width:44rem;display:flex;flex-direction:column;gap:1.5rem">
+
+    <form method="GET" action="/search">
+      <div style="display:flex;gap:0.5rem">
+        <input
+          name="q"
+          type="search"
+          value={q}
+          placeholder="Search firearms, sessions, ammo, gear, drills…"
+          autofocus
+          style="flex:1;font-size:1rem;padding:0.625rem 1rem"
+        />
+        <button type="submit" class="btn btn-primary">Search</button>
+      </div>
+    </form>
+
+    {q.length > 0 && q.length < 2 && (
+      <div style="color:var(--text-muted);font-size:0.875rem">Enter at least 2 characters.</div>
+    )}
+
+    {q.length >= 2 && results.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <div class="empty-state-text">No results for "{q}"</div>
+      </div>
+    )}
+
+    {results.length > 0 && (
+      <div class="card card-divide">
+        {results.map(r => (
+          <a href={r.href} class="list-row list-row-link" style="gap:0.875rem">
+            <span style={`font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${typeColor[r.type] ?? 'var(--accent)'};flex-shrink:0;width:3.5rem`}>
+              {r.type}
+            </span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.875rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{r.label}</div>
+              {r.sub && <div style="font-size:0.72rem;color:var(--text-muted)">{r.sub}</div>}
+            </div>
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--text-dim);flex-shrink:0">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+        ))}
+      </div>
+    )}
+
+  </div>
+</Layout>
