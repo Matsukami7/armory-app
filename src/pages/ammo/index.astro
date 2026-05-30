@@ -183,10 +183,19 @@ const byaliber = calibers.map(cal => {
             </div>
           </div>
           <div class="form-row form-row-2">
-            <div><label>Quantity *</label><input name="quantity" type="number" min="0" required placeholder="0" /></div>
-            <div><label>Cost / Round ($)</label><input name="costPerRound" type="number" step="0.001" min="0" placeholder="0.000" /></div>
+            <div><label>Quantity *</label><input id="add-qty" name="quantity" type="number" min="0" required placeholder="0" oninput="calcCpr()" /></div>
+            <div><label>Total Cost ($) <span style="font-size:0.65rem;opacity:0.7">optional</span></label><input id="add-total" type="number" step="0.01" min="0" placeholder="0.00" oninput="calcCpr()" /></div>
           </div>
-          <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          <div class="form-row form-row-2">
+            <div>
+              <label style="display:flex;align-items:center;gap:0.5rem">
+                Cost / Round ($)
+                <span id="add-cpr-badge" style="display:none;font-size:0.65rem;font-weight:700;color:var(--accent);background:rgba(var(--accent-rgb),0.12);border:1px solid rgba(var(--accent-rgb),0.3);padding:0.1rem 0.4rem;border-radius:9999px">auto-calculated</span>
+              </label>
+              <input id="add-cpr" name="costPerRound" type="number" step="0.001" min="0" placeholder="0.000" oninput="onCprManual()" />
+            </div>
+            <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          </div>
           <button type="submit" class="btn btn-primary btn-full">Add Ammo</button>
         </div>
       </form>
@@ -194,3 +203,29 @@ const byaliber = calibers.map(cal => {
 
   </div>
 </Layout>
+
+<script>
+let cprManual = false;
+
+function calcCpr() {
+  if (cprManual) return;
+  const qty   = parseFloat((document.getElementById('add-qty') as HTMLInputElement).value);
+  const total = parseFloat((document.getElementById('add-total') as HTMLInputElement).value);
+  const cpr   = document.getElementById('add-cpr') as HTMLInputElement;
+  const badge = document.getElementById('add-cpr-badge') as HTMLElement;
+  if (qty > 0 && total > 0) {
+    cpr.value = (total / qty).toFixed(3);
+    badge.style.display = 'inline';
+  } else {
+    cpr.value = '';
+    badge.style.display = 'none';
+  }
+}
+
+function onCprManual() {
+  const cpr   = document.getElementById('add-cpr') as HTMLInputElement;
+  const badge = document.getElementById('add-cpr-badge') as HTMLElement;
+  cprManual = cpr.value !== '';
+  badge.style.display = 'none';
+}
+</script>
