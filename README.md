@@ -19,8 +19,9 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 
 ### Dashboard
 - At-a-glance stats: total firearms, sessions, lifetime rounds, collection value vs. what you paid, and all-time ammo spend
-- Maintenance due alerts — set a service interval per firearm and the dashboard flags overdue ones
-- Low ammo and low gear stock warnings
+- Maintenance due alerts — set a service interval (rounds) and/or cleaning schedule (days) per firearm; dashboard flags overdue ones with reason detail
+- Low ammo alerts with per-ammo configurable thresholds (not a global hardcoded value)
+- Low gear stock warnings
 - **⚡ Quick Log** button — log rounds to today's session in seconds without leaving the dashboard
 - Recent sessions list
 
@@ -31,6 +32,8 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - Round count odometer — total lifetime rounds auto-summed from all sessions
 - Label any firearm with color-coded tags; filter the vault by tag
 - Attach accessories, maintain a log, and set a service interval for cleaning alerts
+- **Transfer / Sale log** — mark a firearm as sold or transferred; record date, recipient, and price; hidden from active vault but preserved in history; reversible
+- **Document storage** — attach PDFs, manuals, registrations, or other documents per firearm; PDFs open inline in the browser
 - 5 firearm types: Pistol, Rifle, Shotgun, Revolver, Other
 
 ### Accessories
@@ -44,7 +47,15 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 ### Firearm Log
 - Per-firearm log: **Note**, **Cleaning**, **Repair**, **Inspection**, **Modification**
 - Record round count at time of service — used to calculate rounds since last cleaning
-- Maintenance interval alerts on the dashboard when a firearm is overdue
+- **Dual cleaning schedule** — set a service interval in rounds, days, or both; dashboard alerts when either threshold is exceeded
+
+### DOPE Cards (Ballistic Data)
+- Per-firearm **DOPE cards** (Data On Previous Engagements) for long-range marksmanship
+- Each card links to an ammo load, zero distance, and muzzle velocity
+- Log distance entries with **both MOA and MRAD** corrections for elevation and wind (10mph full-value)
+- **Printable DOPE sheet** — configurable unit display (MOA only / MRAD only / both), distance format (yards / meters / both), and number of blank rows to append
+- Print card auto-populates rifle, ammo, optic, and zero data from your database
+- App chrome (sidebar, nav) hidden automatically when printing
 
 ### Range Sessions
 - Log sessions with date, location, duration, weather, and notes
@@ -53,6 +64,7 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - Link ammo inventory to auto-deduct rounds on save
 - Session cost calculated automatically (rounds fired × cost per round)
 - Color-coded tags on sessions; filter the sessions list by tag
+- **Session Templates** — save a named preset (location + firearm/ammo loadout); load it as a pill shortcut when creating a new session
 - **Compare** any two sessions side-by-side: rounds, cost, drill scores (green/red improvement indicators), firearms used
 
 ### Drills
@@ -65,16 +77,21 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 ### Ammo Inventory
 - Track ammo by caliber, brand, grain, and type (FMJ, HP, SP, Match, Subsonic, Other)
 - Quick +50 / −50 round adjusters on the inventory page
-- Cost-per-round tracking with auto-calculation
+- **Auto cost-per-round calculation** — enter quantity and total purchase price, cost/round fills in automatically; override manually if needed
 - **Purchase log** per ammo type: date, quantity, total cost, retailer — quantity updates automatically
 - **Price trend chart** — cost-per-round charted over all logged purchases; shows when prices go up or down
-- Low ammo dashboard alert when any type drops below 100 rounds
+- **Price Compare tab** — groups ammo by caliber, sorted cheapest first; "Best Price" badge, cost delta vs. cheapest, relative bar chart
+- Per-ammo low stock threshold — set a custom alert level per type; dashboard warns when stock hits it
 
 ### Quick Log
 - `/log` — minimal form for range use: pick firearm, enter rounds, optionally select ammo
 - Automatically appends to today's session; creates a new session if none exists
 - Ammo filtered by caliber automatically; round input auto-focused after firearm selection
 - "View Today's Session" button appears once a session exists
+
+### Global Search
+- Search across all entities from the sidebar: firearms, sessions, ammo, accessories, drills, and gear
+- Color-coded results by type with direct links
 
 ### Gear / Consumables
 - Track cleaning supplies, targets, batteries, tools, and safety gear
@@ -101,6 +118,8 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - One-click database download from Settings — no SSH required
 - Vault summary: firearm, session, and ammo counts
 - Default password warning until `ARMORY_PASSWORD` is changed
+- **Update checker** — shows when a new release is available with a changelog link; checks GitHub Releases, cached 6h
+- **Backup configuration** — add local path or S3-compatible destinations (AWS S3, Cloudflare R2, Backblaze B2); "Backup Now" triggers an immediate backup and shows per-destination results
 
 ### Theming
 - 5 color themes selectable per user: **Tactical** (cyan), **Ember** (amber), **Ranger** (green), **Void** (purple), **Ghost** (slate)
@@ -140,6 +159,16 @@ Open `http://<your-server-ip>:4321`.
 4. Link an ammo type to auto-deduct from inventory
 5. Tap **+ Log Drill** to record individual drills with score, par time, and target photo
 
+### Using session templates
+1. Go to **Range** → **Templates** and create a preset with your usual location and firearm/ammo loadout
+2. When logging a new session, click the template pill at the top to pre-fill the form
+
+### Creating a DOPE card
+1. Open a firearm → tap **🎯 DOPE** in the page header
+2. Create a card — give it a name, link an ammo load, set your zero distance and muzzle velocity
+3. Add distance entries: fill in elevation and wind corrections in MOA and/or MRAD
+4. Tap **🖨 Print Card** to open the printable version; choose unit and distance display options before printing
+
 ### Tracking drills over time
 - Go to **Drills** to see all drills grouped by name
 - Any drill with ≥ 2 numeric scores gets a trend chart automatically
@@ -151,8 +180,10 @@ Open `http://<your-server-ip>:4321`.
 
 ### Managing ammo
 1. Go to **Ammo** → **+ Add Ammo**
-2. Use **+50 / −50** buttons to adjust counts manually
-3. Tap **Edit** on any ammo entry to log purchases — each purchase auto-adds to inventory and logs for the price trend chart
+2. Enter quantity and total purchase cost — cost per round is calculated automatically
+3. Use **+50 / −50** buttons to adjust counts manually
+4. Tap **Edit** on any ammo entry to log purchases — each purchase auto-adds to inventory and logs for the price trend chart
+5. Set a **Low Stock Threshold** per ammo type to get dashboard alerts at your preferred level
 
 ### Tagging firearms and sessions
 - On any firearm or session detail page, type a tag name in the tag input and press Enter
@@ -170,9 +201,9 @@ Open `http://<your-server-ip>:4321`.
 - For large files (multi-GB recordings) that are impractical to upload through a browser, drop them directly into `data/uploads/footage/` on your server, then add an entry in the Footage library manually
 
 ### Maintenance reminders
-1. On a firearm's **Edit** page, set a **Service Interval (rounds)**
+1. On a firearm's **Edit** page, set a **Service Interval (rounds)** and/or **Cleaning Interval (days)**
 2. Log a **Cleaning** entry in the firearm log each time you clean — record the round count at that moment
-3. The dashboard flags the firearm when rounds since the last cleaning entry exceeds the interval
+3. The dashboard flags the firearm when rounds since the last cleaning exceeds the round interval, or days since the last cleaning exceeds the day interval
 
 ### Printing a range card
 1. Click **Range** → **🖨 Range Card**
@@ -188,11 +219,13 @@ All data lives in `data/` next to your `docker-compose.yml`:
 ```
 data/
   armory.db          — SQLite database (all records)
-  uploads/           — Photos and uploaded videos
+  uploads/           — Photos, videos, and documents
     firearms/
     accessories/
     targets/
     footage/
+    documents/
+  backup-config.json — Backup destinations (auto-created; keep private)
 ```
 
 **To back up:** copy the entire `data/` directory.
@@ -204,7 +237,7 @@ cp -r /path/to/backup/data ./data
 docker compose up -d
 ```
 
-You can also download the database directly from the **Settings** page in the app.
+You can also download the database directly from the **Settings** page, or configure automated backups to a local path or S3-compatible destination (Settings → Backup).
 
 ---
 
@@ -216,6 +249,8 @@ docker compose up -d
 ```
 
 Your `data/` directory is never touched during updates. Database migrations run automatically on startup.
+
+The app shows an update notification on the Settings page when a new GitHub Release is available.
 
 ---
 
@@ -275,21 +310,6 @@ ARMORY_PASSWORD=changeme npm run dev
 
 ---
 
-## Publishing an Update (Maintainers)
-
-```bash
-# Log in once
-echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-
-# Build and push
-docker build -t ghcr.io/matsukami7/armory-app:latest .
-docker push ghcr.io/matsukami7/armory-app:latest
-```
-
-Token: GitHub → Settings → Developer settings → Personal access tokens → `write:packages`.
-
----
-
 ## Security Notes
 
 - Designed for **local network use**. No multi-user support.
@@ -297,6 +317,7 @@ Token: GitHub → Settings → Developer settings → Personal access tokens →
 - Session cookie is `HttpOnly`, `SameSite=Strict`, 30-day expiry.
 - Uploaded files are restricted to allowed extensions; path traversal is prevented server-side.
 - Change the default password before putting the app on your network.
+- `data/backup-config.json` contains S3/R2 credentials — never commit it; it is excluded from the image.
 
 ---
 
