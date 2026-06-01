@@ -34,6 +34,7 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - Attach accessories, maintain a log, and set a service interval for cleaning alerts
 - **Transfer / Sale log** — mark a firearm as sold or transferred; record date, recipient, and price; hidden from active vault but preserved in history; reversible
 - **Document storage** — attach PDFs, manuals, registrations, or other documents per firearm; PDFs open inline in the browser
+- **Barrel round count** — track rounds fired through a specific barrel separately from lifetime firearm rounds; set a rated round count to get a progress bar and warning at 80%
 - 5 firearm types: Pistol, Rifle, Shotgun, Revolver, Other
 
 ### Accessories
@@ -72,6 +73,7 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - **Drill History** page groups all drills by name, sorted by most recently used
 - Score trend charts for drills with numeric results (times, scores, etc.)
 - Par time tracked as a second dashed series on trend charts — see if you're beating the clock over time
+- **Personal records** — gold PR badge on each drill's best score; ★ marker on the history entry; gold ring on the trend chart
 - Full history per drill with session links and target photo thumbnails
 
 ### Ammo Inventory
@@ -82,12 +84,37 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - **Price trend chart** — cost-per-round charted over all logged purchases; shows when prices go up or down
 - **Price Compare tab** — groups ammo by caliber, sorted cheapest first; "Best Price" badge, cost delta vs. cheapest, relative bar chart
 - Per-ammo low stock threshold — set a custom alert level per type; dashboard warns when stock hits it
+- **Lot number tracking** — record the lot/batch number per ammo type for consistency testing
 
 ### Quick Log
 - `/log` — minimal form for range use: pick firearm, enter rounds, optionally select ammo
 - Automatically appends to today's session; creates a new session if none exists
 - Ammo filtered by caliber automatically; round input auto-focused after firearm selection
 - "View Today's Session" button appears once a session exists
+
+### Shot Groups
+- Log group size (inches, MOA, or mm) per firearm, ammo, distance, and session
+- Upload a target photo per group entry
+- **Trend charts** per firearm/distance combination — green dot marks the best (tightest) group recorded
+- Lower is better — chart inverts intuitively
+
+### Training Plans
+- Create structured practice programs with a named drill checklist
+- Set target scores, rep counts, and distances per drill
+- Log completed sessions against a plan; link to actual range sessions
+- **Completion tracking** — automatically detects which plan drills were logged in the linked session and shows a % complete badge
+
+### Maintenance Calendar
+- Single-page view of all firearms with a cleaning schedule configured
+- Sorted overdue-first with red left-border indicators
+- Shows rounds since last clean, days since last clean, and barrel life progress per firearm
+- Direct link to log a cleaning from the calendar
+
+### Wish List
+- Track firearms, ammo, accessories, and gear you want to acquire
+- Set priority (high/medium/low), estimated price, and a reference link
+- Mark items as acquired — they move to a strikethrough "Acquired" section
+- Total estimated cost shown in the page subtitle
 
 ### Global Search
 - Search across all entities from the sidebar: firearms, sessions, ammo, accessories, drills, and gear
@@ -120,6 +147,14 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - Default password warning until `ARMORY_PASSWORD` is changed
 - **Update checker** — shows when a new release is available with a changelog link; checks GitHub Releases, cached 6h
 - **Backup configuration** — add local path or S3-compatible destinations (AWS S3, Cloudflare R2, Backblaze B2); "Backup Now" triggers an immediate backup and shows per-destination results
+- **CSV export** — download sessions, ammo inventory, purchase log, maintenance log, or drills as spreadsheets
+
+### Notifications
+- Push and email alerts for cleaning overdue, low ammo stock, and barrel wear warnings
+- **ntfy** — works with ntfy.sh or a self-hosted ntfy server
+- **Gotify** — self-hosted push notification server
+- **Email** — any SMTP server (Gmail, Fastmail, self-hosted, etc.)
+- Trigger alerts on-demand via the Settings page or automate with a cron job hitting `POST /api/notify/send`
 
 ### Theming
 - 5 color themes selectable per user: **Tactical** (cyan), **Ember** (amber), **Ranger** (green), **Void** (purple), **Ghost** (slate)
