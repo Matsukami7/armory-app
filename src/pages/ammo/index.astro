@@ -18,6 +18,7 @@ if (Astro.request.method === 'POST') {
       type:         form.get('type') as string,
       quantity:     parseInt(form.get('quantity') as string) || 0,
       costPerRound: form.get('costPerRound') ? parseFloat(form.get('costPerRound') as string) : null,
+      lotNumber:    form.get('lotNumber') as string || null,
       notes:        form.get('notes') as string || null,
     });
   }
@@ -129,6 +130,7 @@ const byaliber = calibers.map(cal => {
               </div>
               <div style="font-size:0.75rem;color:var(--text-muted)">
                 {a.type}{a.costPerRound ? ` · $${a.costPerRound.toFixed(3)}/rd` : ''}
+                {a.lotNumber ? ` · lot ${a.lotNumber}` : ''}
                 {a.notes ? ` · ${a.notes}` : ''}
               </div>
             </div>
@@ -196,6 +198,7 @@ const byaliber = calibers.map(cal => {
             </div>
             <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
           </div>
+          <div><label>Lot Number</label><input name="lotNumber" type="text" placeholder="e.g. L22A1 — optional" /></div>
           <button type="submit" class="btn btn-primary btn-full">Add Ammo</button>
         </div>
       </form>

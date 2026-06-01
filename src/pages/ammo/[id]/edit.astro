@@ -52,6 +52,7 @@ if (Astro.request.method === 'POST') {
     quantity:          parseInt(form.get('quantity') as string) || 0,
     costPerRound:      form.get('costPerRound') ? parseFloat(form.get('costPerRound') as string) : null,
     lowStockThreshold: form.get('lowStockThreshold') ? parseInt(form.get('lowStockThreshold') as string) : 0,
+    lotNumber:         form.get('lotNumber') as string || null,
     notes:             form.get('notes') as string || null,
   }).where(eq(ammoInventory.id, id));
   return Astro.redirect('/ammo');
@@ -101,8 +102,9 @@ const pricePoints = [...purchases].reverse().flatMap(p =>
           </div>
           <div class="form-row form-row-2">
             <div><label>Low Stock Alert (rounds)</label><input name="lowStockThreshold" type="number" min="0" value={ammo.lowStockThreshold ?? 0} placeholder="0 = disabled" /></div>
-            <div><label>Notes</label><input name="notes" type="text" value={ammo.notes ?? ''} placeholder="Optional" /></div>
+            <div><label>Lot Number</label><input name="lotNumber" type="text" value={ammo.lotNumber ?? ''} placeholder="e.g. L22A1" /></div>
           </div>
+          <div><label>Notes</label><input name="notes" type="text" value={ammo.notes ?? ''} placeholder="Optional" /></div>
           <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
         </div>
       </form>

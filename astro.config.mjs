@@ -10,7 +10,12 @@ export default defineConfig({
     checkOrigin: false,
   },
   vite: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
+    build: {
+      rollupOptions: {
+        external: ['nodemailer'],
+      },
+    },
   },
   adapter: node({
     mode: 'standalone'

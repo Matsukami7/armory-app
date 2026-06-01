@@ -172,6 +172,63 @@ sqlite.exec(`
     ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL
   );
 
+  CREATE TABLE IF NOT EXISTS training_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS training_plan_drills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL REFERENCES training_plans(id) ON DELETE CASCADE,
+    drill_name TEXT NOT NULL,
+    target_score TEXT,
+    reps INTEGER NOT NULL DEFAULT 1,
+    distance TEXT,
+    notes TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS training_plan_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL REFERENCES training_plans(id) ON DELETE CASCADE,
+    session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL,
+    completed_at TEXT NOT NULL,
+    notes TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS shot_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL,
+    firearm_id INTEGER REFERENCES firearms(id) ON DELETE SET NULL,
+    ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL,
+    date TEXT NOT NULL,
+    distance INTEGER,
+    distance_unit TEXT NOT NULL DEFAULT 'yards',
+    group_size REAL NOT NULL,
+    group_unit TEXT NOT NULL DEFAULT 'inches',
+    shot_count INTEGER,
+    notes TEXT,
+    photo_path TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS wish_list (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'firearm',
+    make TEXT,
+    model TEXT,
+    estimated_price REAL,
+    priority TEXT NOT NULL DEFAULT 'medium',
+    url TEXT,
+    notes TEXT,
+    acquired INTEGER NOT NULL DEFAULT 0,
+    acquired_date TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS dope_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     firearm_id INTEGER NOT NULL REFERENCES firearms(id) ON DELETE CASCADE,
@@ -209,9 +266,12 @@ if (!firearmColumns.includes('transfer_date'))           sqlite.exec("ALTER TABL
 if (!firearmColumns.includes('transfer_to'))             sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_to TEXT");
 if (!firearmColumns.includes('transfer_price'))          sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_price REAL");
 if (!firearmColumns.includes('transfer_notes'))          sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_notes TEXT");
+if (!firearmColumns.includes('barrel_round_count'))      sqlite.exec("ALTER TABLE firearms ADD COLUMN barrel_round_count INTEGER NOT NULL DEFAULT 0");
+if (!firearmColumns.includes('barrel_rated_rounds'))     sqlite.exec("ALTER TABLE firearms ADD COLUMN barrel_rated_rounds INTEGER");
 
 const ammoColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('ammo_inventory')").all() as { name: string }[]).map(r => r.name);
 if (!ammoColumns.includes('low_stock_threshold'))        sqlite.exec("ALTER TABLE ammo_inventory ADD COLUMN low_stock_threshold INTEGER NOT NULL DEFAULT 0");
+if (!ammoColumns.includes('lot_number'))                 sqlite.exec("ALTER TABLE ammo_inventory ADD COLUMN lot_number TEXT");
 
 const sessionColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('range_sessions')").all() as { name: string }[]).map(r => r.name);
 if (!sessionColumns.includes('tags'))                    sqlite.exec("ALTER TABLE range_sessions ADD COLUMN tags TEXT");

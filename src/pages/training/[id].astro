@@ -1,0 +1,207 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { trainingPlans, trainingPlanDrills, trainingPlanSessions, drills, rangeSessions } from '../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+
+const planId = parseInt(Astro.params.id!);
+if (isNaN(planId)) return Astro.redirect('/training');
+
+const [plan] = await db.select().from(trainingPlans).where(eq(trainingPlans.id, planId));
+if (!plan) return Astro.redirect('/training');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'add_drill') {
+    const existing = await db.select().from(trainingPlanDrills).where(eq(trainingPlanDrills.planId, planId));
+    await db.insert(trainingPlanDrills).values({
+      planId,
+      drillName:   form.get('drillName') as string,
+      targetScore: form.get('targetScore') as string || null,
+      reps:        parseInt(form.get('reps') as string) || 1,
+      distance:    form.get('distance') as string || null,
+      notes:       form.get('notes') as string || null,
+      sortOrder:   existing.length,
+    });
+  }
+
+  if (action === 'delete_drill') {
+    await db.delete(trainingPlanDrills).where(eq(trainingPlanDrills.id, parseInt(form.get('drillId') as string)));
+  }
+
+  if (action === 'log_session') {
+    await db.insert(trainingPlanSessions).values({
+      planId,
+      sessionId:   form.get('sessionId') ? parseInt(form.get('sessionId') as string) : null,
+      completedAt: form.get('completedAt') as string,
+      notes:       form.get('notes') as string || null,
+    });
+  }
+
+  if (action === 'delete_session_log') {
+    await db.delete(trainingPlanSessions).where(eq(trainingPlanSessions.id, parseInt(form.get('logId') as string)));
+  }
+
+  if (action === 'update_plan') {
+    await db.update(trainingPlans).set({
+      name:        form.get('name') as string,
+      description: form.get('description') as string || null,
+    }).where(eq(trainingPlans.id, planId));
+  }
+
+  return Astro.redirect(`/training/${planId}`);
+}
+
+const planDrills   = await db.select().from(trainingPlanDrills).where(eq(trainingPlanDrills.planId, planId)).orderBy(trainingPlanDrills.sortOrder);
+const sessionLogs  = await db.select().from(trainingPlanSessions).where(eq(trainingPlanSessions.planId, planId)).orderBy(desc(trainingPlanSessions.completedAt));
+const recentSessions = await db.select().from(rangeSessions).orderBy(desc(rangeSessions.date)).limit(20);
+
+const today = new Date().toISOString().split('T')[0];
+
+// For each completed session log, look up matching actual drills to show completion
+const sessionDrillMap = new Map<number, string[]>();
+for (const log of sessionLogs) {
+  if (!log.sessionId) continue;
+  const sessionDrills = await db.select().from(drills).where(eq(drills.sessionId, log.sessionId));
+  const drillNames = sessionDrills.map(d => d.name.toLowerCase());
+  const matched = planDrills.filter(pd => drillNames.includes(pd.drillName.toLowerCase())).map(pd => pd.drillName);
+  sessionDrillMap.set(log.id, matched);
+}
+---
+
+<Layout title={plan.name} sub="Training plan" backHref="/training">
+  <slot name="actions" slot="actions">
+    <a href="/training" class="btn btn-secondary">← Plans</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:52rem">
+
+    <!-- Plan drills -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◎</span>
+        <span class="section-title">Drill Checklist</span>
+        <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">{planDrills.length} drills</span>
+      </div>
+      {planDrills.length > 0 ? (
+        <div class="card card-divide">
+          {planDrills.map((d, i) => (
+            <div class="list-row" style="justify-content:space-between;gap:1rem">
+              <div style="display:flex;align-items:center;gap:0.75rem;flex:1">
+                <span style="font-size:0.7rem;font-weight:700;color:var(--text-dim);min-width:1.2rem">{i + 1}</span>
+                <div>
+                  <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{d.drillName}</div>
+                  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.125rem">
+                    {d.reps > 1 && <span style="font-size:0.7rem;color:var(--text-dim)">{d.reps}×</span>}
+                    {d.distance && <span class="pill pill-default" style="font-size:0.65rem">{d.distance}</span>}
+                    {d.targetScore && <span style="font-size:0.7rem;color:var(--accent)">target: {d.targetScore}</span>}
+                    {d.notes && <span style="font-size:0.7rem;color:var(--text-dim)">{d.notes}</span>}
+                  </div>
+                </div>
+              </div>
+              <form method="POST">
+                <input type="hidden" name="_action" value="delete_drill" />
+                <input type="hidden" name="drillId" value={d.id} />
+                <button type="submit" class="btn-delete">✕</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div class="card" style="padding:1rem;text-align:center;color:var(--text-dim);font-size:0.8rem">No drills yet — add some below</div>
+      )}
+
+      <details class="accordion" style="margin-top:0.5rem">
+        <summary>+ Add Drill</summary>
+        <form method="POST" class="form-section">
+          <input type="hidden" name="_action" value="add_drill" />
+          <div class="form-row form-row-2">
+            <div><label>Drill Name *</label><input name="drillName" type="text" required placeholder="El Presidente" /></div>
+            <div><label>Target Score</label><input name="targetScore" type="text" placeholder="sub 5.0s, 100pts…" /></div>
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Reps</label><input name="reps" type="number" min="1" value="1" /></div>
+            <div><label>Distance</label><input name="distance" type="text" placeholder="7 yards" /></div>
+          </div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          <button type="submit" class="btn btn-primary">Add Drill</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Completed sessions -->
+    <div>
+      <div class="section-header">
+        <span style="color:#22c55e;font-size:0.75rem">✓</span>
+        <span class="section-title">Completed Sessions</span>
+        <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">{sessionLogs.length} total</span>
+      </div>
+
+      {sessionLogs.length > 0 && (
+        <div class="card card-divide" style="margin-bottom:0.75rem">
+          {sessionLogs.map(log => {
+            const matched = sessionDrillMap.get(log.id) ?? [];
+            const pct = planDrills.length > 0 ? Math.round((matched.length / planDrills.length) * 100) : 0;
+            return (
+              <div class="list-row" style="justify-content:space-between;gap:1rem">
+                <div style="flex:1">
+                  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                    <span style="font-size:0.8125rem;font-weight:600;color:var(--text)">{log.completedAt}</span>
+                    {log.sessionId && <a href={`/sessions/${log.sessionId}`} style="font-size:0.7rem;color:var(--accent)">Session →</a>}
+                    {planDrills.length > 0 && (
+                      <span style={`font-size:0.7rem;font-weight:700;color:${pct === 100 ? '#22c55e' : 'var(--text-muted)'}`}>{pct}% complete</span>
+                    )}
+                  </div>
+                  {matched.length > 0 && (
+                    <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.375rem">
+                      {matched.map(name => <span class="pill pill-default" style="font-size:0.65rem;color:#22c55e">✓ {name}</span>)}
+                    </div>
+                  )}
+                  {log.notes && <div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.25rem">{log.notes}</div>}
+                </div>
+                <form method="POST">
+                  <input type="hidden" name="_action" value="delete_session_log" />
+                  <input type="hidden" name="logId" value={log.id} />
+                  <button type="submit" class="btn-delete">✕</button>
+                </form>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <details class="accordion">
+        <summary>+ Log Completed Session</summary>
+        <form method="POST" class="form-section">
+          <input type="hidden" name="_action" value="log_session" />
+          <div class="form-row form-row-2">
+            <div><label>Date *</label><input name="completedAt" type="date" required value={today} /></div>
+            <div>
+              <label>Link to Session</label>
+              <select name="sessionId">
+                <option value="">— None —</option>
+                {recentSessions.map(s => <option value={s.id}>{s.date}{s.location ? ` · ${s.location}` : ''}</option>)}
+              </select>
+            </div>
+          </div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="How it went, what to focus on next…" /></div>
+          <button type="submit" class="btn btn-primary">Log Session</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Edit plan name/description -->
+    <details class="accordion">
+      <summary>Edit Plan Details</summary>
+      <form method="POST" class="form-section">
+        <input type="hidden" name="_action" value="update_plan" />
+        <div><label>Plan Name *</label><input name="name" type="text" required value={plan.name} /></div>
+        <div><label>Description</label><textarea name="description" rows="2">{plan.description ?? ''}</textarea></div>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </form>
+    </details>
+
+  </div>
+</Layout>

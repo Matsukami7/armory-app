@@ -26,6 +26,8 @@ if (Astro.request.method === 'POST') {
     currentValue:          form.get('currentValue') ? parseFloat(form.get('currentValue') as string) : null,
     serviceIntervalRounds: form.get('serviceIntervalRounds') ? parseInt(form.get('serviceIntervalRounds') as string) : null,
     cleanIntervalDays:     form.get('cleanIntervalDays') ? parseInt(form.get('cleanIntervalDays') as string) : null,
+    barrelRoundCount:      form.get('barrelRoundCount') ? parseInt(form.get('barrelRoundCount') as string) : 0,
+    barrelRatedRounds:     form.get('barrelRatedRounds') ? parseInt(form.get('barrelRatedRounds') as string) : null,
   }).where(eq(firearms.id, id));
   return Astro.redirect(`/firearms/${id}`);
 }
@@ -72,6 +74,12 @@ if (Astro.request.method === 'POST') {
       <div><label>Cleaning Interval (days)</label><input name="cleanIntervalDays" type="number" min="1" value={firearm.cleanIntervalDays ?? ''} placeholder="e.g. 90" /></div>
     </div>
     <p style="font-size:0.72rem;color:var(--text-muted);margin-top:-0.5rem">Either threshold triggers a cleaning alert — whichever comes first.</p>
+
+    <div class="form-row form-row-2">
+      <div><label>Barrel Round Count</label><input name="barrelRoundCount" type="number" min="0" value={firearm.barrelRoundCount ?? 0} placeholder="0" /></div>
+      <div><label>Barrel Rated Rounds</label><input name="barrelRatedRounds" type="number" min="1" value={firearm.barrelRatedRounds ?? ''} placeholder="e.g. 20000 — optional" /></div>
+    </div>
+    <p style="font-size:0.72rem;color:var(--text-muted);margin-top:-0.5rem">Barrel round count is separate from firearm lifetime rounds. Set rated rounds to get an alert when approaching end of life.</p>
 
     <button type="submit" class="btn btn-primary btn-full">Save Changes</button>
   </form>

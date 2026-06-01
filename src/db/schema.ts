@@ -16,6 +16,8 @@ export const firearms = sqliteTable('firearms', {
   photoPath: text('photo_path'),
   serviceIntervalRounds: integer('service_interval_rounds'),
   cleanIntervalDays: integer('clean_interval_days'),
+  barrelRoundCount: integer('barrel_round_count').notNull().default(0),
+  barrelRatedRounds: integer('barrel_rated_rounds'),
   tags: text('tags'), // comma-separated tag list
   status: text('status').notNull().default('active'), // active | sold | transferred
   transferDate: text('transfer_date'),
@@ -71,6 +73,7 @@ export const ammoInventory = sqliteTable('ammo_inventory', {
   quantity: integer('quantity').notNull().default(0),
   costPerRound: real('cost_per_round'),
   lowStockThreshold: integer('low_stock_threshold').notNull().default(0),
+  lotNumber: text('lot_number'),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
@@ -175,6 +178,63 @@ export const sessionTemplateFirearms = sqliteTable('session_template_firearms', 
   templateId: integer('template_id').notNull().references(() => sessionTemplates.id, { onDelete: 'cascade' }),
   firearmId: integer('firearm_id').notNull().references(() => firearms.id, { onDelete: 'cascade' }),
   ammoId: integer('ammo_id').references(() => ammoInventory.id, { onDelete: 'set null' }),
+});
+
+export const trainingPlans = sqliteTable('training_plans', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const trainingPlanDrills = sqliteTable('training_plan_drills', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  planId: integer('plan_id').notNull().references(() => trainingPlans.id, { onDelete: 'cascade' }),
+  drillName: text('drill_name').notNull(),
+  targetScore: text('target_score'),
+  reps: integer('reps').notNull().default(1),
+  distance: text('distance'),
+  notes: text('notes'),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
+export const trainingPlanSessions = sqliteTable('training_plan_sessions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  planId: integer('plan_id').notNull().references(() => trainingPlans.id, { onDelete: 'cascade' }),
+  sessionId: integer('session_id').references(() => rangeSessions.id, { onDelete: 'set null' }),
+  completedAt: text('completed_at').notNull(),
+  notes: text('notes'),
+});
+
+export const shotGroups = sqliteTable('shot_groups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  sessionId: integer('session_id').references(() => rangeSessions.id, { onDelete: 'set null' }),
+  firearmId: integer('firearm_id').references(() => firearms.id, { onDelete: 'set null' }),
+  ammoId: integer('ammo_id').references(() => ammoInventory.id, { onDelete: 'set null' }),
+  date: text('date').notNull(),
+  distance: integer('distance'),           // yards
+  distanceUnit: text('distance_unit').notNull().default('yards'),
+  groupSize: real('group_size').notNull(), // inches or MOA depending on unit
+  groupUnit: text('group_unit').notNull().default('inches'), // inches | moa | mm
+  shotCount: integer('shot_count'),
+  notes: text('notes'),
+  photoPath: text('photo_path'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const wishList = sqliteTable('wish_list', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  category: text('category').notNull().default('firearm'), // firearm | ammo | gear | accessory | other
+  make: text('make'),
+  model: text('model'),
+  estimatedPrice: real('estimated_price'),
+  priority: text('priority').notNull().default('medium'), // high | medium | low
+  url: text('url'),
+  notes: text('notes'),
+  acquired: integer('acquired', { mode: 'boolean' }).notNull().default(false),
+  acquiredDate: text('acquired_date'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
 export const dopeCards = sqliteTable('dope_cards', {

@@ -1,0 +1,188 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { loadNotifyConfig, saveNotifyConfig } from '../../lib/notifications';
+import type { NotifyChannel } from '../../lib/notifications';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+  const cfg = loadNotifyConfig();
+
+  if (action === 'add_ntfy') {
+    cfg.channels.push({ type: 'ntfy', url: form.get('url') as string, topic: form.get('topic') as string });
+    saveNotifyConfig(cfg);
+  }
+
+  if (action === 'add_gotify') {
+    cfg.channels.push({ type: 'gotify', url: form.get('url') as string, token: form.get('token') as string });
+    saveNotifyConfig(cfg);
+  }
+
+  if (action === 'add_email') {
+    cfg.channels.push({
+      type: 'email',
+      smtp: form.get('smtp') as string,
+      port: parseInt(form.get('port') as string) || 587,
+      user: form.get('user') as string,
+      pass: form.get('pass') as string,
+      from: form.get('from') as string,
+      to:   form.get('to') as string,
+    });
+    saveNotifyConfig(cfg);
+  }
+
+  if (action === 'remove_channel') {
+    const idx = parseInt(form.get('index') as string);
+    cfg.channels.splice(idx, 1);
+    saveNotifyConfig(cfg);
+  }
+
+  if (action === 'save_triggers') {
+    cfg.onMaintenanceDue = form.get('onMaintenanceDue') === 'on';
+    cfg.onLowAmmo        = form.get('onLowAmmo') === 'on';
+    cfg.onBarrelWear     = form.get('onBarrelWear') === 'on';
+    saveNotifyConfig(cfg);
+  }
+
+  return Astro.redirect('/settings/notifications');
+}
+
+const cfg = loadNotifyConfig();
+
+function channelLabel(ch: NotifyChannel): string {
+  if (ch.type === 'ntfy')   return `ntfy — ${ch.url}/${ch.topic}`;
+  if (ch.type === 'gotify') return `Gotify — ${ch.url}`;
+  return `Email → ${ch.to}`;
+}
+---
+
+<Layout title="Notifications" sub="Alert channels and triggers" backHref="/settings">
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:36rem">
+
+    <!-- Configured channels -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◈</span>
+        <span class="section-title">Alert Channels</span>
+      </div>
+      {cfg.channels.length > 0 ? (
+        <div class="card card-divide" style="margin-bottom:0.75rem">
+          {cfg.channels.map((ch, i) => (
+            <div class="list-row" style="justify-content:space-between;gap:1rem">
+              <span style="font-size:0.8125rem;color:var(--text)">{channelLabel(ch)}</span>
+              <form method="POST">
+                <input type="hidden" name="_action" value="remove_channel" />
+                <input type="hidden" name="index" value={i} />
+                <button type="submit" class="btn-delete">✕</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div class="card" style="padding:1rem;text-align:center;color:var(--text-dim);font-size:0.8rem;margin-bottom:0.75rem">No channels configured</div>
+      )}
+
+      <!-- Test button -->
+      {cfg.channels.length > 0 && (
+        <button id="test-btn" class="btn btn-secondary" style="margin-bottom:1rem" onclick="testNotify(this)">Send Test Notification</button>
+      )}
+    </div>
+
+    <!-- Add ntfy -->
+    <details class="accordion">
+      <summary>+ Add ntfy Channel</summary>
+      <form method="POST" class="form-section">
+        <input type="hidden" name="_action" value="add_ntfy" />
+        <div><label>ntfy Server URL</label><input name="url" type="url" required placeholder="https://ntfy.sh" /></div>
+        <div><label>Topic</label><input name="topic" type="text" required placeholder="armory-alerts" /></div>
+        <p style="font-size:0.72rem;color:var(--text-muted)">Free public server at ntfy.sh, or self-host. Use a private/hard-to-guess topic name on public servers.</p>
+        <button type="submit" class="btn btn-primary">Add ntfy</button>
+      </form>
+    </details>
+
+    <!-- Add Gotify -->
+    <details class="accordion">
+      <summary>+ Add Gotify Channel</summary>
+      <form method="POST" class="form-section">
+        <input type="hidden" name="_action" value="add_gotify" />
+        <div><label>Gotify URL</label><input name="url" type="url" required placeholder="https://gotify.yourdomain.com" /></div>
+        <div><label>App Token</label><input name="token" type="text" required placeholder="App token from Gotify" /></div>
+        <button type="submit" class="btn btn-primary">Add Gotify</button>
+      </form>
+    </details>
+
+    <!-- Add Email -->
+    <details class="accordion">
+      <summary>+ Add Email Channel</summary>
+      <form method="POST" class="form-section">
+        <input type="hidden" name="_action" value="add_email" />
+        <div class="form-row form-row-2">
+          <div><label>SMTP Host</label><input name="smtp" type="text" required placeholder="smtp.gmail.com" /></div>
+          <div><label>Port</label><input name="port" type="number" value="587" /></div>
+        </div>
+        <div class="form-row form-row-2">
+          <div><label>Username</label><input name="user" type="text" required placeholder="you@gmail.com" /></div>
+          <div><label>Password / App Password</label><input name="pass" type="password" required /></div>
+        </div>
+        <div class="form-row form-row-2">
+          <div><label>From</label><input name="from" type="email" required placeholder="armory@yourdomain.com" /></div>
+          <div><label>To</label><input name="to" type="email" required placeholder="you@yourdomain.com" /></div>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Email</button>
+      </form>
+    </details>
+
+    <!-- Triggers -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">⚡</span>
+        <span class="section-title">Notification Triggers</span>
+      </div>
+      <form method="POST" class="card" style="padding:1.25rem">
+        <input type="hidden" name="_action" value="save_triggers" />
+        <div class="form-section">
+          <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer">
+            <input type="checkbox" name="onMaintenanceDue" checked={cfg.onMaintenanceDue} />
+            <span>Cleaning overdue (rounds or days threshold exceeded)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer">
+            <input type="checkbox" name="onLowAmmo" checked={cfg.onLowAmmo} />
+            <span>Ammo below low-stock threshold</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer">
+            <input type="checkbox" name="onBarrelWear" checked={cfg.onBarrelWear} />
+            <span>Barrel at ≥80% of rated life</span>
+          </label>
+          <p style="font-size:0.72rem;color:var(--text-muted)">
+            Notifications are sent on-demand — click "Send Test Notification" above or call
+            <code style="background:var(--bg-hover);padding:0.1rem 0.3rem;border-radius:0.25rem">POST /api/notify/send</code>
+            from a cron job or automation to push current alerts.
+          </p>
+          <button type="submit" class="btn btn-primary">Save Triggers</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="test-result" style="display:none" class="card" style="padding:1rem"></div>
+  </div>
+</Layout>
+
+<script>
+async function testNotify(btn: HTMLButtonElement) {
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const res  = await fetch('/api/notify/send', { method: 'POST' });
+    const data = await res.json();
+    const el = document.getElementById('test-result')!;
+    el.style.display = 'block';
+    el.style.padding = '1rem';
+    el.innerHTML = `<div style="font-size:0.8rem;color:var(--text)">${data.sent} message(s) dispatched</div>` +
+      data.results.map((r: any) => `<div style="font-size:0.75rem;color:${r.ok ? '#22c55e' : '#f87171'};margin-top:0.25rem">${r.ok ? '✓' : '✕'} ${r.channel}${r.error ? ` — ${r.error}` : ''}</div>`).join('');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Test Notification';
+  }
+}
+(window as any).testNotify = testNotify;
+</script>

@@ -203,6 +203,10 @@ const cleanDueByRounds = gun.serviceIntervalRounds != null && roundsSinceClean >
 const cleanDueByDays   = gun.cleanIntervalDays != null && (daysSinceClean == null || daysSinceClean >= gun.cleanIntervalDays);
 const cleaningDue = cleanDueByRounds || cleanDueByDays;
 const hasCleaningInterval = gun.serviceIntervalRounds != null || gun.cleanIntervalDays != null;
+
+const barrelRounds = gun.barrelRoundCount ?? 0;
+const barrelPct    = gun.barrelRatedRounds ? Math.min(100, (barrelRounds / gun.barrelRatedRounds) * 100) : null;
+const barrelWarn   = barrelPct != null && barrelPct >= 80;
 ---
 
 <Layout title={gun.name} sub={`${gun.make} ${gun.model}${gun.generation ? ` ${gun.generation}` : ''} · ${gun.caliber}`} backHref="/firearms">
@@ -287,6 +291,24 @@ const hasCleaningInterval = gun.serviceIntervalRounds != null || gun.cleanInterv
                   <div class="stat-card-value" style="color:#22c55e">${gun.purchasePrice.toFixed(2)}</div>
                   {gun.purchaseDate && <div class="stat-card-sub">{gun.purchaseDate}</div>}
                 </>
+              )}
+            </div>
+          </div>
+        )}
+        {(barrelRounds > 0 || gun.barrelRatedRounds) && (
+          <div class="stat-card" style={`flex:1;${barrelWarn ? 'border-color:#f9731666' : ''}`}>
+            <div>
+              <div class="stat-card-label" style={barrelWarn ? 'color:#f97316' : ''}>{barrelWarn ? '⚠ Barrel' : 'Barrel'}</div>
+              <div class="stat-card-value" style={`font-size:1.1rem;color:${barrelWarn ? '#f97316' : 'var(--text)'}`}>{barrelRounds.toLocaleString()}</div>
+              {gun.barrelRatedRounds ? (
+                <>
+                  <div class="stat-card-sub">of ~{gun.barrelRatedRounds.toLocaleString()} rated</div>
+                  <div style="margin-top:0.375rem;height:4px;background:var(--bg-hover);border-radius:9999px;overflow:hidden">
+                    <div style={`height:100%;width:${barrelPct!.toFixed(1)}%;background:${barrelWarn ? '#f97316' : 'var(--accent)'};border-radius:9999px`}></div>
+                  </div>
+                </>
+              ) : (
+                <div class="stat-card-sub">barrel rounds</div>
               )}
             </div>
           </div>

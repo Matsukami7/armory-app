@@ -1,0 +1,160 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { firearms, maintenanceLogs, sessionFirearms } from '../../db/schema';
+import { eq, desc, sum } from 'drizzle-orm';
+
+// Fetch all active firearms that have any maintenance interval configured
+const allGuns = await db.select().from(firearms)
+  .where(eq(firearms.status, 'active'));
+
+const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+
+type GunStatus = {
+  gun: typeof allGuns[0];
+  totalRounds: number;
+  lastCleaning: { date: string; roundCount: number | null } | null;
+  roundsSinceClean: number;
+  daysSinceClean: number | null;
+  nextCleanByRounds: string | null;
+  nextCleanByDate: string | null;
+  overdueRounds: boolean;
+  overdueDays: boolean;
+  barrelPct: number | null;
+};
+
+const statuses: GunStatus[] = [];
+
+for (const gun of allGuns) {
+  const rounds = await db.select({ total: sum(sessionFirearms.roundsFired) })
+    .from(sessionFirearms).where(eq(sessionFirearms.firearmId, gun.id));
+  const totalRounds = parseInt(String(rounds[0]?.total ?? 0)) || 0;
+
+  const logs = await db.select().from(maintenanceLogs)
+    .where(eq(maintenanceLogs.firearmId, gun.id))
+    .orderBy(desc(maintenanceLogs.date));
+  const lastCleaning = logs.find(l => l.type === 'cleaning') ?? null;
+
+  const roundsSinceClean = totalRounds - (lastCleaning?.roundCount ?? 0);
+  const daysSinceClean = lastCleaning?.date
+    ? Math.floor((today.getTime() - new Date(lastCleaning.date).getTime()) / 86_400_000)
+    : null;
+
+  const overdueRounds = gun.serviceIntervalRounds != null && roundsSinceClean >= gun.serviceIntervalRounds;
+  const overdueDays   = gun.cleanIntervalDays != null && (daysSinceClean == null || daysSinceClean >= gun.cleanIntervalDays);
+
+  // Estimate next clean date from days interval
+  let nextCleanByDate: string | null = null;
+  if (gun.cleanIntervalDays && lastCleaning?.date) {
+    const d = new Date(lastCleaning.date);
+    d.setDate(d.getDate() + gun.cleanIntervalDays);
+    nextCleanByDate = d.toISOString().split('T')[0];
+  } else if (gun.cleanIntervalDays && !lastCleaning) {
+    nextCleanByDate = todayStr; // never cleaned — overdue immediately
+  }
+
+  // Estimate next clean by rounds
+  let nextCleanByRounds: string | null = null;
+  if (gun.serviceIntervalRounds) {
+    const remaining = gun.serviceIntervalRounds - roundsSinceClean;
+    nextCleanByRounds = remaining <= 0 ? 'Overdue' : `${remaining.toLocaleString()} rds`;
+  }
+
+  const barrelPct = gun.barrelRatedRounds && (gun.barrelRoundCount ?? 0) > 0
+    ? Math.min(100, ((gun.barrelRoundCount ?? 0) / gun.barrelRatedRounds) * 100)
+    : null;
+
+  if (gun.serviceIntervalRounds || gun.cleanIntervalDays || gun.barrelRatedRounds) {
+    statuses.push({ gun, totalRounds, lastCleaning: lastCleaning ? { date: lastCleaning.date, roundCount: lastCleaning.roundCount } : null, roundsSinceClean, daysSinceClean, nextCleanByRounds, nextCleanByDate, overdueRounds, overdueDays, barrelPct });
+  }
+}
+
+// Sort: overdue first, then by next due date
+statuses.sort((a, b) => {
+  const aOver = a.overdueRounds || a.overdueDays ? 0 : 1;
+  const bOver = b.overdueRounds || b.overdueDays ? 0 : 1;
+  if (aOver !== bOver) return aOver - bOver;
+  const aDate = a.nextCleanByDate ?? '9999';
+  const bDate = b.nextCleanByDate ?? '9999';
+  return aDate.localeCompare(bDate);
+});
+
+const overdueCount = statuses.filter(s => s.overdueRounds || s.overdueDays).length;
+---
+
+<Layout title="Maintenance" sub={`${statuses.length} tracked · ${overdueCount} overdue`}>
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:52rem">
+
+    {statuses.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">🔧</div>
+        <div class="empty-state-text">No maintenance schedules configured. Set a cleaning interval or barrel rated rounds on a firearm's Edit page.</div>
+        <a href="/firearms" class="btn btn-primary">Go to Vault</a>
+      </div>
+    )}
+
+    {statuses.length > 0 && (
+      <div class="card card-divide">
+        {statuses.map(s => {
+          const overdue = s.overdueRounds || s.overdueDays;
+          return (
+            <div class="list-row" style={`justify-content:space-between;gap:1rem;${overdue ? 'border-left:3px solid #ef4444;padding-left:0.75rem' : ''}`}>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                  {overdue && <span style="font-size:0.7rem;font-weight:800;color:#ef4444">⚠</span>}
+                  <a href={`/firearms/${s.gun.id}`} style="font-size:0.875rem;font-weight:600;color:var(--text);text-decoration:none">{s.gun.name}</a>
+                  <span style="font-size:0.72rem;color:var(--text-dim)">{s.gun.caliber}</span>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.5rem 1.5rem;margin-top:0.5rem">
+                  {s.gun.serviceIntervalRounds && (
+                    <div>
+                      <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Rounds Since Clean</div>
+                      <div style={`font-size:0.875rem;font-weight:700;color:${s.overdueRounds ? '#ef4444' : 'var(--text)'}`}>
+                        {s.roundsSinceClean.toLocaleString()} / {s.gun.serviceIntervalRounds.toLocaleString()}
+                      </div>
+                      {s.nextCleanByRounds && (
+                        <div style={`font-size:0.72rem;color:${s.overdueRounds ? '#ef4444' : 'var(--text-muted)'}`}>{s.nextCleanByRounds} remaining</div>
+                      )}
+                    </div>
+                  )}
+                  {s.gun.cleanIntervalDays && (
+                    <div>
+                      <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Days Since Clean</div>
+                      <div style={`font-size:0.875rem;font-weight:700;color:${s.overdueDays ? '#ef4444' : 'var(--text)'}`}>
+                        {s.daysSinceClean != null ? s.daysSinceClean : '—'} / {s.gun.cleanIntervalDays}d
+                      </div>
+                      {s.nextCleanByDate && (
+                        <div style={`font-size:0.72rem;color:${s.overdueDays ? '#ef4444' : 'var(--text-muted)'}`}>
+                          {s.overdueDays ? 'Overdue' : `Due ${s.nextCleanByDate}`}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {s.barrelPct != null && (
+                    <div>
+                      <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Barrel Life</div>
+                      <div style={`font-size:0.875rem;font-weight:700;color:${s.barrelPct >= 80 ? '#f97316' : 'var(--text)'}`}>
+                        {(s.gun.barrelRoundCount ?? 0).toLocaleString()} / {s.gun.barrelRatedRounds!.toLocaleString()}
+                      </div>
+                      <div style="margin-top:0.25rem;height:4px;background:var(--bg-hover);border-radius:9999px;overflow:hidden;max-width:120px">
+                        <div style={`height:100%;width:${s.barrelPct.toFixed(1)}%;background:${s.barrelPct >= 80 ? '#f97316' : 'var(--accent)'};border-radius:9999px`}></div>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted)">Last Cleaned</div>
+                    <div style="font-size:0.8rem;color:var(--text)">{s.lastCleaning?.date ?? 'Never'}</div>
+                  </div>
+                </div>
+              </div>
+              <a href={`/firearms/${s.gun.id}`} class="btn btn-secondary btn-sm" style="flex-shrink:0">Log →</a>
+            </div>
+          );
+        })}
+      </div>
+    )}
+
+  </div>
+</Layout>

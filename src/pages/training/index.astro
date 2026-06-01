@@ -1,0 +1,93 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { trainingPlans, trainingPlanDrills, trainingPlanSessions } from '../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'create_plan') {
+    const [plan] = await db.insert(trainingPlans).values({
+      name:        form.get('name') as string,
+      description: form.get('description') as string || null,
+    }).returning();
+    return Astro.redirect(`/training/${plan.id}`);
+  }
+
+  if (action === 'delete_plan') {
+    await db.delete(trainingPlans).where(eq(trainingPlans.id, parseInt(form.get('planId') as string)));
+  }
+
+  return Astro.redirect('/training');
+}
+
+const plans = await db.select().from(trainingPlans).orderBy(desc(trainingPlans.createdAt));
+const planData = await Promise.all(plans.map(async plan => {
+  const drillItems = await db.select().from(trainingPlanDrills).where(eq(trainingPlanDrills.planId, plan.id)).orderBy(trainingPlanDrills.sortOrder);
+  const sessions   = await db.select().from(trainingPlanSessions).where(eq(trainingPlanSessions.planId, plan.id)).orderBy(desc(trainingPlanSessions.completedAt));
+  return { ...plan, drillItems, sessions };
+}));
+---
+
+<Layout title="Training Plans" sub="Structured practice programs">
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:52rem">
+
+    {planData.map(plan => (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">◈</span>
+          <span class="section-title">{plan.name}</span>
+          <span style="margin-left:auto;display:flex;gap:0.5rem">
+            <a href={`/training/${plan.id}`} class="btn btn-primary" style="font-size:0.72rem;padding:0.25rem 0.75rem">Open →</a>
+            <form method="POST" onsubmit="return confirm('Delete this training plan?')">
+              <input type="hidden" name="_action" value="delete_plan" />
+              <input type="hidden" name="planId" value={plan.id} />
+              <button type="submit" class="btn-delete">✕</button>
+            </form>
+          </span>
+        </div>
+        <div class="card" style="padding:1rem">
+          {plan.description && <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem">{plan.description}</div>}
+          <div style="display:flex;gap:1.5rem;font-size:0.8rem;color:var(--text-muted)">
+            <span><strong style="color:var(--text)">{plan.drillItems.length}</strong> drills</span>
+            <span><strong style="color:var(--text)">{plan.sessions.length}</strong> sessions completed</span>
+            {plan.sessions[0] && <span>Last: <strong style="color:var(--text)">{plan.sessions[0].completedAt}</strong></span>}
+          </div>
+          {plan.drillItems.length > 0 && (
+            <div style="margin-top:0.75rem;display:flex;flex-wrap:wrap;gap:0.375rem">
+              {plan.drillItems.map(d => (
+                <span class="pill pill-default" style="font-size:0.7rem">{d.drillName}{d.targetScore ? ` · ${d.targetScore}` : ''}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    ))}
+
+    {planData.length === 0 && (
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-text">No training plans yet. Create one below to build a structured practice program.</div>
+      </div>
+    )}
+
+    <!-- Create new plan -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">+</span>
+        <span class="section-title">New Training Plan</span>
+      </div>
+      <form method="POST" class="card" style="padding:1.5rem">
+        <input type="hidden" name="_action" value="create_plan" />
+        <div class="form-section">
+          <div><label>Plan Name *</label><input name="name" type="text" required placeholder="e.g. USPSA Fundamentals — 8 Week" /></div>
+          <div><label>Description</label><textarea name="description" rows="2" placeholder="Goals, focus areas, notes…"></textarea></div>
+          <button type="submit" class="btn btn-primary">Create Plan</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</Layout>

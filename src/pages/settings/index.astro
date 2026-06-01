@@ -64,6 +64,18 @@ const usingDefault = (process.env.ARMORY_PASSWORD ?? 'changeme') === 'changeme';
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
             <a href="/api/backup/db" class="btn btn-primary" download>⬇ Download Database</a>
             <a href="/settings/backup" class="btn btn-secondary">Configure Auto-Backup →</a>
+            <a href="/settings/notifications" class="btn btn-secondary">Configure Notifications →</a>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:1rem">
+          <div style="font-size:0.875rem;font-weight:600;color:var(--text);margin-bottom:0.25rem">Export to CSV</div>
+          <div style="font-size:0.8125rem;color:var(--text-muted);margin-bottom:0.75rem">Download your data as spreadsheets for use in Excel, Google Sheets, or other tools.</div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <a href="/api/export/sessions" class="btn btn-secondary btn-sm" download>Sessions</a>
+            <a href="/api/export/ammo" class="btn btn-secondary btn-sm" download>Ammo Inventory</a>
+            <a href="/api/export/ammo-purchases" class="btn btn-secondary btn-sm" download>Purchase Log</a>
+            <a href="/api/export/maintenance" class="btn btn-secondary btn-sm" download>Maintenance Log</a>
+            <a href="/api/export/drills" class="btn btn-secondary btn-sm" download>Drills</a>
           </div>
         </div>
         <div style="border-top:1px solid var(--border);padding-top:1rem">
