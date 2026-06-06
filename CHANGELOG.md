@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.2.1] — 2026-06-06
+
+### Fixed
+- **`.env.example`** now documents the `ORIGIN` variable, which is required when running behind a reverse proxy (Caddy, nginx, Traefik, openresty, etc.). Without it, Astro's CSRF protection blocks all form submissions from a custom domain. Also corrects the default `ARMORY_PASSWORD` value (`changeme`) and `DB_PATH` to match the Docker default (`/data/armory.db`).
+
+---
+
 ## [1.2.0] — 2026-06-06
 
 ### Added

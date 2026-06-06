@@ -180,13 +180,17 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 ```bash
 mkdir armory && cd armory
 curl -O https://raw.githubusercontent.com/Matsukami7/armory-app/master/docker-compose.yml
-echo "ARMORY_PASSWORD=your-secure-password-here" > .env
+curl -O https://raw.githubusercontent.com/Matsukami7/armory-app/master/.env.example
+mv .env.example .env
+# Edit .env — set ARMORY_PASSWORD and ORIGIN before starting
 docker compose up -d
 ```
 
 Open `http://<your-server-ip>:4321`.
 
 > **Default password is `changeme`.** A warning banner appears on every page until you change it.
+
+> **Behind a reverse proxy?** Set `ORIGIN=https://your-domain.com` in your `.env` — required for Caddy, nginx, Traefik, openresty, and any other proxy. Without it, Astro's CSRF protection will block all form submissions.
 
 ---
 
