@@ -4,6 +4,19 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.3.0] — 2026-06-06
+
+### Added
+- **Range Memberships & Pricing** (`/ranges`) — track range memberships alongside hourly and day-rate walk-in pricing
+  - Log monthly membership fee, hourly walk-in rate, and day rate per range
+  - Sessions linked to a range by substring-matching the session location field
+  - Month-by-month breakdown: sessions, hours, membership cost, equivalent hourly cost, equivalent day-rate cost, savings vs. alternatives
+  - Break-even calculator: how many visits or hours per month justify the membership over walk-in pricing
+  - All-time stats: total paid, total sessions, effective cost per visit, effective cost per hour
+  - Multiple ranges supported; active/inactive status
+
+---
+
 ## [1.2.2] — 2026-06-06
 
 ### Fixed

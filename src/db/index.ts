@@ -253,6 +253,20 @@ sqlite.exec(`
     notes TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS range_memberships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    location_match TEXT,
+    monthly_fee REAL,
+    hourly_rate REAL,
+    day_rate REAL,
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+  );
+
   CREATE TABLE IF NOT EXISTS ar_builds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

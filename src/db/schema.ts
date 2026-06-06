@@ -261,6 +261,20 @@ export const dopeEntries = sqliteTable('dope_entries', {
   notes: text('notes'),
 });
 
+export const rangeMemberships = sqliteTable('range_memberships', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  locationMatch: text('location_match'),   // substring matched against range_sessions.location
+  monthlyFee: real('monthly_fee'),
+  hourlyRate: real('hourly_rate'),
+  dayRate: real('day_rate'),
+  startDate: text('start_date').notNull(),
+  endDate: text('end_date'),               // null = still active
+  status: text('status').notNull().default('active'), // active | inactive
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
 export const arBuilds = sqliteTable('ar_builds', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),

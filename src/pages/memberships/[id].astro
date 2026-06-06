@@ -1,0 +1,288 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { rangeMemberships, rangeSessions } from '../../db/schema';
+import { eq, sql } from 'drizzle-orm';
+
+const membershipId = parseInt(Astro.params.id!);
+if (isNaN(membershipId)) return Astro.redirect('/memberships');
+
+const [membership] = await db.select().from(rangeMemberships).where(eq(rangeMemberships.id, membershipId));
+if (!membership) return Astro.redirect('/memberships');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'update') {
+    await db.update(rangeMemberships).set({
+      name:          form.get('name') as string,
+      locationMatch: form.get('locationMatch') as string || null,
+      monthlyFee:    form.get('monthlyFee')  ? parseFloat(form.get('monthlyFee')  as string) : null,
+      hourlyRate:    form.get('hourlyRate')  ? parseFloat(form.get('hourlyRate')  as string) : null,
+      dayRate:       form.get('dayRate')     ? parseFloat(form.get('dayRate')     as string) : null,
+      startDate:     form.get('startDate')   as string,
+      endDate:       form.get('endDate')     as string || null,
+      status:        form.get('status')      as string,
+      notes:         form.get('notes')       as string || null,
+    }).where(eq(rangeMemberships.id, membershipId));
+  }
+
+  if (action === 'delete') {
+    await db.delete(rangeMemberships).where(eq(rangeMemberships.id, membershipId));
+    return Astro.redirect('/memberships');
+  }
+
+  return Astro.redirect(`/memberships/${membershipId}`);
+}
+
+// Reload after POST
+const [m] = await db.select().from(rangeMemberships).where(eq(rangeMemberships.id, membershipId));
+
+// Build month list from start_date to end_date (or today)
+function monthsBetween(start: string, end: string): string[] {
+  const months: string[] = [];
+  const s = new Date(start + '-01');
+  const e = new Date(end   + '-01');
+  while (s <= e) {
+    months.push(s.toISOString().slice(0, 7));
+    s.setMonth(s.getMonth() + 1);
+  }
+  return months;
+}
+
+const today = new Date().toISOString().split('T')[0];
+const endMonth = m.endDate ? m.endDate.slice(0, 7) : today.slice(0, 7);
+const months = monthsBetween(m.startDate.slice(0, 7), endMonth).reverse(); // newest first
+
+// Per-month session stats
+const monthStats = await Promise.all(months.map(async (month) => {
+  if (!m.locationMatch) return { month, sessions: 0, totalMinutes: 0 };
+  const [row] = await db
+    .select({
+      sessions:     sql<number>`COUNT(*)`,
+      totalMinutes: sql<number>`SUM(COALESCE(${rangeSessions.durationMinutes}, 0))`,
+    })
+    .from(rangeSessions)
+    .where(sql`strftime('%Y-%m', ${rangeSessions.date}) = ${month}
+           AND LOWER(${rangeSessions.location}) LIKE LOWER('%' || ${m.locationMatch} || '%')`);
+  return { month, sessions: row?.sessions ?? 0, totalMinutes: row?.totalMinutes ?? 0 };
+}));
+
+// All-time totals
+const allTimeSessions  = monthStats.reduce((s, r) => s + r.sessions, 0);
+const allTimeMinutes   = monthStats.reduce((s, r) => s + r.totalMinutes, 0);
+const activeMonths     = months.length;
+const totalPaid        = m.monthlyFee ? m.monthlyFee * activeMonths : null;
+const avgSessionsMo    = activeMonths > 0 ? allTimeSessions / activeMonths : 0;
+const avgHoursMo       = activeMonths > 0 ? (allTimeMinutes / 60) / activeMonths : 0;
+
+function fmt$(n: number | null | undefined) {
+  if (n == null) return '—';
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtHrs(mins: number) {
+  if (!mins) return '0m';
+  const h = Math.floor(mins / 60), mo = mins % 60;
+  return h > 0 ? `${h}h${mo > 0 ? ` ${mo}m` : ''}` : `${mo}m`;
+}
+function fmtMonth(m: string) {
+  const [y, mo] = m.split('-');
+  return new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+}
+
+const GAS_LABEL: Record<string, string> = { active: 'Active', inactive: 'Inactive' };
+---
+
+<Layout title={m.name} sub="Range membership detail" backHref="/memberships">
+  <slot name="actions" slot="actions">
+    <a href="/memberships" class="btn btn-secondary">← Ranges</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:52rem">
+
+    <!-- Header card -->
+    <div class="card" style="padding:1.25rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+        <div>
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
+            <span style={`font-size:0.6rem;font-weight:700;padding:0.1rem 0.45rem;border-radius:9999px;${m.status === 'active' ? 'color:#22c55e;background:#22c55e18' : 'color:var(--text-dim);background:var(--bg)'}`}>
+              {m.status === 'active' ? 'Active' : 'Inactive'}
+            </span>
+            {m.startDate && <span style="font-size:0.7rem;color:var(--text-dim)">since {m.startDate}</span>}
+            {m.endDate   && <span style="font-size:0.7rem;color:var(--text-dim)">→ {m.endDate}</span>}
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            {m.monthlyFee != null && <span class="pill pill-accent">{fmt$(m.monthlyFee)}/mo</span>}
+            {m.hourlyRate != null && <span class="pill pill-default">{fmt$(m.hourlyRate)}/hr walk-in</span>}
+            {m.dayRate    != null && <span class="pill pill-default">{fmt$(m.dayRate)}/day walk-in</span>}
+          </div>
+          {m.locationMatch && <div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.375rem">Matching sessions with location containing "{m.locationMatch}"</div>}
+          {m.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.375rem">{m.notes}</div>}
+        </div>
+
+        {totalPaid != null && (
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Total Paid</div>
+            <div style="font-size:1.25rem;font-weight:700;color:var(--accent)">{fmt$(totalPaid)}</div>
+            <div style="font-size:0.7rem;color:var(--text-dim)">{activeMonths} month{activeMonths !== 1 ? 's' : ''}</div>
+          </div>
+        )}
+      </div>
+
+      <!-- All-time stat row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0.75rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <div style="text-align:center">
+          <div style="font-size:1.1rem;font-weight:700;color:var(--text)">{allTimeSessions}</div>
+          <div style="font-size:0.65rem;color:var(--text-dim)">total sessions</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.1rem;font-weight:700;color:var(--text)">{fmtHrs(allTimeMinutes)}</div>
+          <div style="font-size:0.65rem;color:var(--text-dim)">total time</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.1rem;font-weight:700;color:var(--text)">{avgSessionsMo.toFixed(1)}</div>
+          <div style="font-size:0.65rem;color:var(--text-dim)">sessions/mo avg</div>
+        </div>
+        {m.monthlyFee && allTimeSessions > 0 && (
+          <div style="text-align:center">
+            <div style="font-size:1.1rem;font-weight:700;color:var(--accent)">{fmt$(totalPaid! / allTimeSessions)}</div>
+            <div style="font-size:0.65rem;color:var(--text-dim)">effective cost/visit</div>
+          </div>
+        )}
+        {m.monthlyFee && allTimeMinutes > 0 && (
+          <div style="text-align:center">
+            <div style="font-size:1.1rem;font-weight:700;color:var(--accent)">{fmt$(totalPaid! / (allTimeMinutes / 60))}</div>
+            <div style="font-size:0.65rem;color:var(--text-dim)">effective cost/hr</div>
+          </div>
+        )}
+        {m.monthlyFee && m.dayRate && (
+          <div style="text-align:center">
+            <div style={`font-size:1.1rem;font-weight:700;${avgSessionsMo >= m.monthlyFee / m.dayRate ? 'color:#22c55e' : 'color:#f87171'}`}>
+              {Math.ceil(m.monthlyFee / m.dayRate)}
+            </div>
+            <div style="font-size:0.65rem;color:var(--text-dim)">visits/mo to break even (day)</div>
+          </div>
+        )}
+        {m.monthlyFee && m.hourlyRate && (
+          <div style="text-align:center">
+            <div style={`font-size:1.1rem;font-weight:700;${avgHoursMo >= m.monthlyFee / m.hourlyRate ? 'color:#22c55e' : 'color:#f87171'}`}>
+              {(m.monthlyFee / m.hourlyRate).toFixed(1)}h
+            </div>
+            <div style="font-size:0.65rem;color:var(--text-dim)">hrs/mo to break even (hourly)</div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <!-- Month-by-month table -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◈</span>
+        <span class="section-title">Month-by-Month</span>
+        <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">{months.length} months</span>
+      </div>
+
+      {months.length === 0 ? (
+        <div class="empty-state">No months recorded yet.</div>
+      ) : (
+        <div class="card" style="overflow:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.8rem;min-width:480px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:0.625rem 1rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">Month</th>
+                <th style="text-align:right;padding:0.625rem 0.75rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">Sessions</th>
+                <th style="text-align:right;padding:0.625rem 0.75rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">Hours</th>
+                {m.monthlyFee != null && <th style="text-align:right;padding:0.625rem 0.75rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">Membership</th>}
+                {m.hourlyRate != null && <th style="text-align:right;padding:0.625rem 0.75rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">If Hourly</th>}
+                {m.dayRate    != null && <th style="text-align:right;padding:0.625rem 0.75rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">If Day Rate</th>}
+                {(m.hourlyRate != null || m.dayRate != null) && m.monthlyFee != null && (
+                  <th style="text-align:right;padding:0.625rem 1rem;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim)">Savings</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {monthStats.map((row) => {
+                const hrs         = row.totalMinutes / 60;
+                const hourlyCost  = m.hourlyRate != null ? hrs * m.hourlyRate            : null;
+                const dayCost     = m.dayRate    != null ? row.sessions * m.dayRate      : null;
+                const bestAlt     = [hourlyCost, dayCost].filter(v => v != null).reduce((a, b) => Math.max(a!, b!), 0);
+                const savings     = m.monthlyFee != null && bestAlt != null ? bestAlt - m.monthlyFee : null;
+                const isCurrentMo = row.month === new Date().toISOString().slice(0, 7);
+                return (
+                  <tr style={`border-bottom:1px solid var(--border);${isCurrentMo ? 'background:var(--bg-hover)' : ''}`}>
+                    <td style="padding:0.625rem 1rem;font-weight:600;color:var(--text);white-space:nowrap">
+                      {fmtMonth(row.month)}
+                      {isCurrentMo && <span style="font-size:0.6rem;color:var(--accent);margin-left:0.375rem">current</span>}
+                    </td>
+                    <td style="padding:0.625rem 0.75rem;text-align:right;color:var(--text)">{row.sessions}</td>
+                    <td style="padding:0.625rem 0.75rem;text-align:right;color:var(--text-dim)">{row.totalMinutes > 0 ? fmtHrs(row.totalMinutes) : '—'}</td>
+                    {m.monthlyFee != null && <td style="padding:0.625rem 0.75rem;text-align:right;color:var(--text)">{fmt$(m.monthlyFee)}</td>}
+                    {m.hourlyRate != null && <td style="padding:0.625rem 0.75rem;text-align:right;color:var(--text-dim)">{hourlyCost != null && hrs > 0 ? fmt$(hourlyCost) : '—'}</td>}
+                    {m.dayRate    != null && <td style="padding:0.625rem 0.75rem;text-align:right;color:var(--text-dim)">{dayCost != null && row.sessions > 0 ? fmt$(dayCost) : '—'}</td>}
+                    {(m.hourlyRate != null || m.dayRate != null) && m.monthlyFee != null && (
+                      <td style="padding:0.625rem 1rem;text-align:right;font-weight:700">
+                        {savings != null && bestAlt! > 0
+                          ? <span style={savings >= 0 ? 'color:#22c55e' : 'color:#f87171'}>{savings >= 0 ? `+${fmt$(savings)}` : fmt$(savings)}</span>
+                          : <span style="color:var(--text-dim)">—</span>
+                        }
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    <!-- Edit / Delete -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--text-dim);font-size:0.75rem">◈</span>
+        <span class="section-title" style="color:var(--text-dim)">Settings</span>
+      </div>
+      <div class="card" style="padding:1rem">
+        <details>
+          <summary class="btn btn-secondary" style="list-style:none;cursor:pointer;display:inline-flex">Edit Range</summary>
+          <form method="POST" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.75rem;max-width:32rem">
+            <input type="hidden" name="_action" value="update" />
+            <div><label>Range Name</label><input name="name" type="text" required value={m.name} /></div>
+            <div>
+              <label>Location Match</label>
+              <input name="locationMatch" type="text" value={m.locationMatch ?? ''} />
+              <div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.25rem">Substring matched against session location field.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.625rem">
+              <div><label>Monthly Fee</label><input name="monthlyFee" type="number" step="0.01" min="0" value={m.monthlyFee ?? ''} placeholder="$/mo" /></div>
+              <div><label>Hourly Rate</label><input name="hourlyRate" type="number" step="0.01" min="0" value={m.hourlyRate ?? ''} placeholder="$/hr" /></div>
+              <div><label>Day Rate</label><input name="dayRate" type="number" step="0.01" min="0" value={m.dayRate ?? ''} placeholder="$/day" /></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.625rem">
+              <div><label>Start Date</label><input name="startDate" type="date" required value={m.startDate} /></div>
+              <div><label>End Date</label><input name="endDate" type="date" value={m.endDate ?? ''} /></div>
+            </div>
+            <div>
+              <label>Status</label>
+              <select name="status">
+                <option value="active"   selected={m.status === 'active'}>Active</option>
+                <option value="inactive" selected={m.status === 'inactive'}>Inactive / Cancelled</option>
+              </select>
+            </div>
+            <div><label>Notes</label><textarea name="notes" rows="2">{m.notes ?? ''}</textarea></div>
+            <button type="submit" class="btn btn-primary" style="align-self:flex-start">Save Changes</button>
+          </form>
+        </details>
+
+        <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <form method="POST" onsubmit="return confirm('Delete this range? This cannot be undone.')">
+            <input type="hidden" name="_action" value="delete" />
+            <button type="submit" class="btn btn-danger">Delete Range</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</Layout>
