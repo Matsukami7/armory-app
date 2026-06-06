@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.2.2] — 2026-06-06
+
+### Fixed
+- **Update checker** now uses proper semver comparison — previously it showed an "update available" banner whenever the latest GitHub Release differed from the installed version, even if the release was *older*. It now only shows the banner when a genuinely newer version is available.
+
+---
+
 ## [1.2.1] — 2026-06-06
 
 ### Fixed
