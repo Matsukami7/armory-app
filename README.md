@@ -110,6 +110,17 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - Shows rounds since last clean, days since last clean, and barrel life progress per firearm
 - Direct link to log a cleaning from the calendar
 
+### AR Build Planner
+- Plan AR-15 builds part by part with **12 standard slots**: Lower Receiver, Upper Receiver, Barrel, BCG, Charging Handle, Handguard, Muzzle Device, Trigger/FCG, Buffer System, Stock/Brace, Grip, and Optic/Sights
+- **Multiple simultaneous builds** — plan a 10.5" pistol and an 18" precision rifle at the same time
+- **Compatibility warnings** — flags gas system vs. barrel length mismatches (pistol/carbine/mid/rifle length ranges) and caliber-specific notes (6.5 Grendel needs Type II bolt, .224 Valkyrie uses 6.8 SPC bolt face, 9mm needs dedicated lower, etc.)
+- Per-part status tracking: **Wanted → Ordered → Acquired** — cycle with one click
+- Per-part **photo upload**, link, price, brand/model, and notes
+- **Budget tracking** — set a build budget; total and acquired cost shown with over-budget warning
+- **Acquisition progress bar** — visual completion across all 12 standard slots
+- **Extra parts** section for accessories, magazines, and anything beyond the standard 12 slots
+- Slots grouped by function: Lower Group / Upper Group / Controls / Optics
+
 ### Wish List
 - Track firearms, ammo, accessories, and gear you want to acquire
 - Set priority (high/medium/low), estimated price, and a reference link
@@ -260,6 +271,7 @@ data/
     targets/
     footage/
     documents/
+    builds/
   backup-config.json — Backup destinations (auto-created; keep private)
 ```
 
