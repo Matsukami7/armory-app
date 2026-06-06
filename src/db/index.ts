@@ -252,6 +252,33 @@ sqlite.exec(`
     wind_mrad REAL,
     notes TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS ar_builds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    caliber TEXT,
+    gas_system TEXT,
+    barrel_length REAL,
+    budget REAL,
+    status TEXT NOT NULL DEFAULT 'planning',
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+  );
+
+  CREATE TABLE IF NOT EXISTS ar_build_parts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_id INTEGER NOT NULL REFERENCES ar_builds(id) ON DELETE CASCADE,
+    slot TEXT NOT NULL,
+    brand TEXT,
+    model TEXT,
+    price REAL,
+    url TEXT,
+    status TEXT NOT NULL DEFAULT 'wanted',
+    notes TEXT,
+    photo_path TEXT,
+    created_at TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
+  );
 `);
 
 // Column migrations for existing databases — safe to run on every startup

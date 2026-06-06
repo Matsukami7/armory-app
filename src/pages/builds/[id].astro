@@ -1,0 +1,547 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { arBuilds, arBuildParts } from '../../db/schema';
+import { eq } from 'drizzle-orm';
+import { saveUpload } from '../../lib/uploads';
+
+const buildId = parseInt(Astro.params.id!);
+if (isNaN(buildId)) return Astro.redirect('/builds');
+
+const [build] = await db.select().from(arBuilds).where(eq(arBuilds.id, buildId));
+if (!build) return Astro.redirect('/builds');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'update_build') {
+    await db.update(arBuilds).set({
+      name:         form.get('name') as string,
+      description:  form.get('description') as string || null,
+      caliber:      form.get('caliber') as string || null,
+      gasSystem:    form.get('gasSystem') as string || null,
+      barrelLength: form.get('barrelLength') ? parseFloat(form.get('barrelLength') as string) : null,
+      budget:       form.get('budget') ? parseFloat(form.get('budget') as string) : null,
+      status:       form.get('status') as string,
+      notes:        form.get('notes') as string || null,
+    }).where(eq(arBuilds.id, buildId));
+    return Astro.redirect(`/builds/${buildId}`);
+  }
+
+  if (action === 'delete_build') {
+    await db.delete(arBuilds).where(eq(arBuilds.id, buildId));
+    return Astro.redirect('/builds');
+  }
+
+  if (action === 'add_part') {
+    const slot      = form.get('slot') as string;
+    const photoFile = form.get('photo') as File | null;
+    let   photoPath: string | null = null;
+    if (photoFile && photoFile.size > 0) {
+      photoPath = await saveUpload(photoFile, 'builds');
+    }
+    await db.insert(arBuildParts).values({
+      buildId,
+      slot,
+      brand:  form.get('brand') as string || null,
+      model:  form.get('model') as string || null,
+      price:  form.get('price') ? parseFloat(form.get('price') as string) : null,
+      url:    form.get('url') as string || null,
+      status: 'wanted',
+      notes:  form.get('notes') as string || null,
+      photoPath,
+    });
+    return Astro.redirect(`/builds/${buildId}`);
+  }
+
+  if (action === 'update_part') {
+    const partId    = parseInt(form.get('partId') as string);
+    const photoFile = form.get('photo') as File | null;
+    const existing  = await db.select().from(arBuildParts).where(eq(arBuildParts.id, partId));
+    let   photoPath = existing[0]?.photoPath ?? null;
+    if (photoFile && photoFile.size > 0) {
+      photoPath = await saveUpload(photoFile, 'builds');
+    }
+    await db.update(arBuildParts).set({
+      brand:     form.get('brand') as string || null,
+      model:     form.get('model') as string || null,
+      price:     form.get('price') ? parseFloat(form.get('price') as string) : null,
+      url:       form.get('url') as string || null,
+      notes:     form.get('notes') as string || null,
+      photoPath,
+    }).where(eq(arBuildParts.id, partId));
+    return Astro.redirect(`/builds/${buildId}`);
+  }
+
+  if (action === 'set_status') {
+    const partId = parseInt(form.get('partId') as string);
+    const [part] = await db.select().from(arBuildParts).where(eq(arBuildParts.id, partId));
+    if (part) {
+      const NEXT: Record<string, string> = { wanted: 'ordered', ordered: 'acquired', acquired: 'wanted' };
+      await db.update(arBuildParts).set({ status: NEXT[part.status] ?? 'wanted' }).where(eq(arBuildParts.id, partId));
+    }
+    return Astro.redirect(`/builds/${buildId}`);
+  }
+
+  if (action === 'delete_part') {
+    await db.delete(arBuildParts).where(eq(arBuildParts.id, parseInt(form.get('partId') as string)));
+    return Astro.redirect(`/builds/${buildId}`);
+  }
+
+  return Astro.redirect(`/builds/${buildId}`);
+}
+
+// Reload after POST handling
+const [freshBuild] = await db.select().from(arBuilds).where(eq(arBuilds.id, buildId));
+const allParts = await db.select().from(arBuildParts).where(eq(arBuildParts.buildId, buildId));
+
+const STANDARD_SLOTS = [
+  { key: 'lower_receiver',  label: 'Lower Receiver',    group: 'Lower' },
+  { key: 'trigger',         label: 'Trigger / FCG',     group: 'Lower' },
+  { key: 'grip',            label: 'Grip',               group: 'Lower' },
+  { key: 'stock_brace',     label: 'Stock / Brace',      group: 'Lower' },
+  { key: 'buffer_system',   label: 'Buffer System',      group: 'Lower' },
+  { key: 'upper_receiver',  label: 'Upper Receiver',     group: 'Upper' },
+  { key: 'barrel',          label: 'Barrel',             group: 'Upper' },
+  { key: 'handguard',       label: 'Handguard',          group: 'Upper' },
+  { key: 'muzzle_device',   label: 'Muzzle Device',      group: 'Upper' },
+  { key: 'bcg',             label: 'Bolt Carrier Group', group: 'Controls' },
+  { key: 'charging_handle', label: 'Charging Handle',    group: 'Controls' },
+  { key: 'optic',           label: 'Optic / Sights',     group: 'Optics' },
+] as const;
+
+type SlotKey = typeof STANDARD_SLOTS[number]['key'];
+const SLOT_GROUPS = ['Lower', 'Upper', 'Controls', 'Optics'] as const;
+
+const partsBySlot = new Map(allParts.filter(p => p.slot !== 'extra').map(p => [p.slot, p]));
+const extraParts  = allParts.filter(p => p.slot === 'extra');
+
+// Cost totals
+const totalCost = allParts.reduce((s, p) => s + (p.price ?? 0), 0);
+const acquiredCost = allParts.filter(p => p.status === 'acquired').reduce((s, p) => s + (p.price ?? 0), 0);
+
+// Progress
+const standardFilled   = STANDARD_SLOTS.filter(s => partsBySlot.has(s.key)).length;
+const standardAcquired = STANDARD_SLOTS.filter(s => partsBySlot.get(s.key)?.status === 'acquired').length;
+const pct = Math.round((standardAcquired / STANDARD_SLOTS.length) * 100);
+
+// Compatibility warnings
+function getCompatibilityWarnings(b: typeof freshBuild): Array<{ level: 'warn' | 'info'; msg: string }> {
+  const out: Array<{ level: 'warn' | 'info'; msg: string }> = [];
+  const { caliber, gasSystem, barrelLength } = b;
+
+  if (gasSystem && barrelLength) {
+    const len = barrelLength;
+    if (gasSystem === 'pistol' && len > 10)
+      out.push({ level: 'warn', msg: `Pistol-length gas is typically for ≤10" barrels. Your ${len}" barrel may over-gas — consider carbine-length.` });
+    else if (gasSystem === 'carbine' && len < 10)
+      out.push({ level: 'warn', msg: `Carbine-length gas is typically for 10–16" barrels. Your ${len}" barrel may over-gas — consider pistol-length.` });
+    else if (gasSystem === 'carbine' && len > 16)
+      out.push({ level: 'warn', msg: `Carbine-length gas is typically for 10–16" barrels. Your ${len}" barrel may under-gas — consider mid or rifle-length.` });
+    else if (gasSystem === 'mid' && len < 14)
+      out.push({ level: 'warn', msg: `Mid-length gas is typically for 14–20" barrels. Your ${len}" barrel may over-gas — consider carbine-length.` });
+    else if (gasSystem === 'mid' && len > 20)
+      out.push({ level: 'warn', msg: `Mid-length gas is typically for 14–20" barrels. Your ${len}" barrel may under-gas — consider rifle-length.` });
+    else if (gasSystem === 'rifle' && len < 18)
+      out.push({ level: 'warn', msg: `Rifle-length gas is typically for 18"+ barrels. Your ${len}" barrel will likely under-gas and cause reliability issues.` });
+  }
+
+  const cal = (caliber ?? '').toLowerCase();
+  if (cal.includes('grendel') || (cal.includes('6.5') && cal.includes('gr')))
+    out.push({ level: 'info', msg: '6.5 Grendel requires a Type II bolt — a standard 5.56 BCG will not work. Verify your BCG is Grendel-specific.' });
+  if (cal.includes('6.8') && (cal.includes('spc') || cal.includes('rem')))
+    out.push({ level: 'info', msg: '6.8 SPC requires a 6.8-specific bolt face — standard 5.56 BCG is not compatible.' });
+  if (cal.includes('.224 val') || cal.includes('224 val'))
+    out.push({ level: 'info', msg: '.224 Valkyrie requires a dedicated barrel and a 6.8 SPC bolt — a standard 5.56 BCG will not work.' });
+  if (cal === '9mm' || cal.includes('9x19') || cal.includes('9×19') || (cal.includes('9mm') && !cal.includes('ar')))
+    out.push({ level: 'info', msg: '9mm builds require a dedicated 9mm lower (Glock or Colt pattern magazine well), a 9mm BCG, and a 9mm barrel.' });
+  if (cal.includes('458 socom') || cal.includes('.458 socom'))
+    out.push({ level: 'info', msg: '.458 SOCOM uses a dedicated barrel and bolt but fits a standard AR-15 lower. Uses modified .308 magazines.' });
+  if (cal.includes('450 bush') || cal.includes('.450 bush'))
+    out.push({ level: 'info', msg: '.450 Bushmaster requires a dedicated barrel and modified bolt. Uses standard lower (single-stack mags).' });
+
+  return out;
+}
+
+const warnings = getCompatibilityWarnings(freshBuild);
+
+const STATUS_COLOR: Record<string, string> = {
+  wanted:   '#f59e0b',
+  ordered:  '#3b82f6',
+  acquired: '#22c55e',
+};
+const STATUS_LABEL: Record<string, string> = {
+  wanted:   'Wanted',
+  ordered:  'Ordered',
+  acquired: 'Acquired',
+};
+const NEXT_STATUS_LABEL: Record<string, string> = {
+  wanted:   'Mark Ordered',
+  ordered:  'Mark Acquired',
+  acquired: 'Mark Wanted',
+};
+const BUILD_STATUS_COLOR: Record<string, string> = {
+  planning:    'var(--text-dim)',
+  in_progress: 'var(--accent)',
+  complete:    '#22c55e',
+};
+const BUILD_STATUS_LABEL: Record<string, string> = {
+  planning:    'Planning',
+  in_progress: 'In Progress',
+  complete:    'Complete',
+};
+const GAS_LABEL: Record<string, string> = {
+  pistol:  'Pistol',
+  carbine: 'Carbine',
+  mid:     'Mid-length',
+  rifle:   'Rifle-length',
+};
+---
+
+<Layout title={freshBuild.name} sub="AR Build Planner" backHref="/builds">
+  <slot name="actions" slot="actions">
+    <a href="/builds" class="btn btn-secondary">← Builds</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:56rem">
+
+    <!-- Build header card -->
+    <div class="card" style="padding:1.25rem">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:0.625rem;flex-wrap:wrap;margin-bottom:0.5rem">
+            <span style={`font-size:0.65rem;font-weight:600;color:${BUILD_STATUS_COLOR[freshBuild.status]};background:${BUILD_STATUS_COLOR[freshBuild.status]}18;padding:0.15rem 0.5rem;border-radius:9999px`}>
+              {BUILD_STATUS_LABEL[freshBuild.status]}
+            </span>
+            {freshBuild.caliber && <span class="pill pill-accent">{freshBuild.caliber}</span>}
+            {freshBuild.gasSystem && <span class="pill pill-default">{GAS_LABEL[freshBuild.gasSystem] ?? freshBuild.gasSystem} gas</span>}
+            {freshBuild.barrelLength && <span class="pill pill-default">{freshBuild.barrelLength}" barrel</span>}
+          </div>
+          {freshBuild.description && <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.5rem">{freshBuild.description}</div>}
+          {freshBuild.notes && <div style="font-size:0.75rem;color:var(--text-dim)">{freshBuild.notes}</div>}
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem;flex-shrink:0">
+          <div style="font-size:1.25rem;font-weight:700;color:var(--accent)">${totalCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+          {freshBuild.budget && (
+            <div style={`font-size:0.7rem;font-weight:600;${totalCost > freshBuild.budget ? 'color:#f87171' : 'color:var(--text-dim)'}`}>
+              of ${freshBuild.budget.toLocaleString('en-US', { maximumFractionDigits: 0 })} budget
+              {totalCost > freshBuild.budget && ` (over by $${(totalCost - freshBuild.budget).toLocaleString('en-US', { maximumFractionDigits: 0 })})`}
+            </div>
+          )}
+          <div style="font-size:0.7rem;color:var(--text-dim)">${acquiredCost.toLocaleString('en-US', { maximumFractionDigits: 0 })} acquired</div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div style="margin-top:0.75rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.375rem">
+          <span style="font-size:0.7rem;color:var(--text-dim)">{standardAcquired}/{STANDARD_SLOTS.length} standard slots acquired</span>
+          <span style="font-size:0.7rem;font-weight:600;color:var(--accent)">{pct}%</span>
+        </div>
+        <div style="height:6px;background:var(--bg);border-radius:9999px;overflow:hidden">
+          <!-- ordered layer -->
+          <div style={`height:100%;width:${Math.round((standardFilled / STANDARD_SLOTS.length) * 100)}%;background:#3b82f640;border-radius:9999px`}></div>
+        </div>
+        <div style="height:6px;background:transparent;border-radius:9999px;overflow:hidden;margin-top:-6px">
+          <div style={`height:100%;width:${pct}%;background:var(--accent);border-radius:9999px;transition:width 0.3s`}></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compatibility warnings -->
+    {warnings.length > 0 && (
+      <div style="display:flex;flex-direction:column;gap:0.5rem">
+        {warnings.map(w => (
+          <div style={`display:flex;gap:0.75rem;padding:0.75rem 1rem;border-radius:0.5rem;background:${w.level === 'warn' ? '#f87171' : '#f59e0b'}12;border:1px solid ${w.level === 'warn' ? '#f87171' : '#f59e0b'}40`}>
+            <span style={`font-size:1rem;flex-shrink:0;${w.level === 'warn' ? 'color:#f87171' : 'color:#f59e0b'}`}>{w.level === 'warn' ? '⚠' : 'ℹ'}</span>
+            <span style="font-size:0.8rem;color:var(--text)">{w.msg}</span>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <!-- Standard slots by group -->
+    {SLOT_GROUPS.map(group => {
+      const slots = STANDARD_SLOTS.filter(s => s.group === group);
+      return (
+        <div>
+          <div class="section-header">
+            <span style="color:var(--accent);font-size:0.75rem">◈</span>
+            <span class="section-title">{group} Group</span>
+            <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">
+              {slots.filter(s => partsBySlot.get(s.key)?.status === 'acquired').length}/{slots.length} acquired
+            </span>
+          </div>
+
+          <div class="card card-divide">
+            {slots.map(slot => {
+              const part = partsBySlot.get(slot.key);
+              return (
+                <div style="padding:0.875rem 1rem">
+                  {part ? (
+                    /* Filled slot */
+                    <div>
+                      <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                        {part.photoPath && (
+                          <img src={part.photoPath} alt="" style="width:3.5rem;height:3.5rem;object-fit:cover;border-radius:0.375rem;flex-shrink:0;border:1px solid var(--border)" />
+                        )}
+                        <div style="flex:1;min-width:0">
+                          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                            <span style={`display:inline-block;width:8px;height:8px;border-radius:50%;background:${STATUS_COLOR[part.status]};flex-shrink:0`}></span>
+                            <span style="font-size:0.7rem;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">{slot.label}</span>
+                            <span style={`font-size:0.6rem;font-weight:700;color:${STATUS_COLOR[part.status]};background:${STATUS_COLOR[part.status]}18;padding:0.1rem 0.4rem;border-radius:9999px`}>
+                              {STATUS_LABEL[part.status]}
+                            </span>
+                          </div>
+                          <div style="font-size:0.9rem;font-weight:600;color:var(--text);margin-top:0.125rem">
+                            {[part.brand, part.model].filter(Boolean).join(' ') || '—'}
+                          </div>
+                          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.25rem">
+                            {part.price && <span style="font-size:0.8rem;font-weight:600;color:var(--accent)">${part.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                            {part.url && <a href={part.url} target="_blank" rel="noopener noreferrer" style="font-size:0.7rem;color:var(--accent);text-decoration:none">↗ Link</a>}
+                          </div>
+                          {part.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.25rem">{part.notes}</div>}
+                        </div>
+                      </div>
+
+                      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
+                        <form method="POST" style="display:inline">
+                          <input type="hidden" name="_action" value="set_status" />
+                          <input type="hidden" name="partId" value={part.id} />
+                          <button type="submit" class="btn btn-secondary" style="font-size:0.7rem;padding:0.25rem 0.75rem">
+                            {NEXT_STATUS_LABEL[part.status]}
+                          </button>
+                        </form>
+
+                        <details style="display:inline-block">
+                          <summary class="btn btn-secondary" style="font-size:0.7rem;padding:0.25rem 0.75rem;list-style:none;cursor:pointer">Edit</summary>
+                          <div style="position:relative;z-index:10">
+                            <form method="POST" enctype="multipart/form-data" style="margin-top:0.75rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;display:flex;flex-direction:column;gap:0.75rem;min-width:280px">
+                              <input type="hidden" name="_action" value="update_part" />
+                              <input type="hidden" name="partId" value={part.id} />
+                              <div class="form-row form-row-2">
+                                <div><label style="font-size:0.7rem">Brand</label><input name="brand" type="text" value={part.brand ?? ''} placeholder="e.g. Aero Precision" /></div>
+                                <div><label style="font-size:0.7rem">Model</label><input name="model" type="text" value={part.model ?? ''} placeholder="e.g. M4E1" /></div>
+                              </div>
+                              <div class="form-row form-row-2">
+                                <div><label style="font-size:0.7rem">Price ($)</label><input name="price" type="number" step="0.01" min="0" value={part.price ?? ''} /></div>
+                                <div><label style="font-size:0.7rem">Link / URL</label><input name="url" type="url" value={part.url ?? ''} placeholder="https://..." /></div>
+                              </div>
+                              <div><label style="font-size:0.7rem">Notes</label><textarea name="notes" rows="2" style="resize:vertical">{part.notes ?? ''}</textarea></div>
+                              <div><label style="font-size:0.7rem">Replace Photo</label><input name="photo" type="file" accept="image/*" /></div>
+                              <div style="display:flex;gap:0.5rem">
+                                <button type="submit" class="btn btn-primary" style="font-size:0.75rem">Save</button>
+                              </div>
+                            </form>
+                          </div>
+                        </details>
+
+                        <form method="POST" style="display:inline" onsubmit="return confirm('Remove this part?')">
+                          <input type="hidden" name="_action" value="delete_part" />
+                          <input type="hidden" name="partId" value={part.id} />
+                          <button type="submit" class="btn btn-danger" style="font-size:0.7rem;padding:0.25rem 0.75rem">Remove</button>
+                        </form>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Empty slot */
+                    <div>
+                      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+                        <span style="font-size:0.75rem;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">{slot.label}</span>
+                        <span style="font-size:0.65rem;color:var(--text-dim);margin-left:auto">empty</span>
+                      </div>
+                      <details>
+                        <summary class="btn btn-secondary" style="font-size:0.7rem;padding:0.25rem 0.75rem;list-style:none;cursor:pointer;display:inline-flex">+ Add Part</summary>
+                        <form method="POST" enctype="multipart/form-data" style="margin-top:0.75rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;display:flex;flex-direction:column;gap:0.75rem">
+                          <input type="hidden" name="_action" value="add_part" />
+                          <input type="hidden" name="slot" value={slot.key} />
+                          <div class="form-row form-row-2">
+                            <div><label style="font-size:0.7rem">Brand</label><input name="brand" type="text" placeholder="e.g. Aero Precision" /></div>
+                            <div><label style="font-size:0.7rem">Model</label><input name="model" type="text" placeholder="e.g. M4E1" /></div>
+                          </div>
+                          <div class="form-row form-row-2">
+                            <div><label style="font-size:0.7rem">Price ($)</label><input name="price" type="number" step="0.01" min="0" /></div>
+                            <div><label style="font-size:0.7rem">Link / URL</label><input name="url" type="url" placeholder="https://..." /></div>
+                          </div>
+                          <div><label style="font-size:0.7rem">Notes</label><textarea name="notes" rows="2" style="resize:vertical"></textarea></div>
+                          <div><label style="font-size:0.7rem">Photo</label><input name="photo" type="file" accept="image/*" /></div>
+                          <button type="submit" class="btn btn-primary" style="font-size:0.75rem;align-self:flex-start">Add to Build</button>
+                        </form>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })}
+
+    <!-- Extra parts -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◈</span>
+        <span class="section-title">Extra Parts & Accessories</span>
+        <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">{extraParts.length} items</span>
+      </div>
+
+      <div class="card card-divide">
+        {extraParts.map(part => (
+          <div style="padding:0.875rem 1rem">
+            <div style="display:flex;align-items:flex-start;gap:0.75rem">
+              {part.photoPath && (
+                <img src={part.photoPath} alt="" style="width:3.5rem;height:3.5rem;object-fit:cover;border-radius:0.375rem;flex-shrink:0;border:1px solid var(--border)" />
+              )}
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                  <span style={`display:inline-block;width:8px;height:8px;border-radius:50%;background:${STATUS_COLOR[part.status]};flex-shrink:0`}></span>
+                  <span style="font-size:0.9rem;font-weight:600;color:var(--text)">
+                    {[part.brand, part.model].filter(Boolean).join(' ') || '—'}
+                  </span>
+                  <span style={`font-size:0.6rem;font-weight:700;color:${STATUS_COLOR[part.status]};background:${STATUS_COLOR[part.status]}18;padding:0.1rem 0.4rem;border-radius:9999px`}>
+                    {STATUS_LABEL[part.status]}
+                  </span>
+                </div>
+                <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.25rem">
+                  {part.price && <span style="font-size:0.8rem;font-weight:600;color:var(--accent)">${part.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                  {part.url && <a href={part.url} target="_blank" rel="noopener noreferrer" style="font-size:0.7rem;color:var(--accent);text-decoration:none">↗ Link</a>}
+                </div>
+                {part.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.25rem">{part.notes}</div>}
+              </div>
+            </div>
+
+            <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
+              <form method="POST" style="display:inline">
+                <input type="hidden" name="_action" value="set_status" />
+                <input type="hidden" name="partId" value={part.id} />
+                <button type="submit" class="btn btn-secondary" style="font-size:0.7rem;padding:0.25rem 0.75rem">
+                  {NEXT_STATUS_LABEL[part.status]}
+                </button>
+              </form>
+
+              <details style="display:inline-block">
+                <summary class="btn btn-secondary" style="font-size:0.7rem;padding:0.25rem 0.75rem;list-style:none;cursor:pointer">Edit</summary>
+                <div style="position:relative;z-index:10">
+                  <form method="POST" enctype="multipart/form-data" style="margin-top:0.75rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;display:flex;flex-direction:column;gap:0.75rem;min-width:280px">
+                    <input type="hidden" name="_action" value="update_part" />
+                    <input type="hidden" name="partId" value={part.id} />
+                    <div class="form-row form-row-2">
+                      <div><label style="font-size:0.7rem">Brand</label><input name="brand" type="text" value={part.brand ?? ''} /></div>
+                      <div><label style="font-size:0.7rem">Model / Name</label><input name="model" type="text" value={part.model ?? ''} /></div>
+                    </div>
+                    <div class="form-row form-row-2">
+                      <div><label style="font-size:0.7rem">Price ($)</label><input name="price" type="number" step="0.01" min="0" value={part.price ?? ''} /></div>
+                      <div><label style="font-size:0.7rem">Link / URL</label><input name="url" type="url" value={part.url ?? ''} /></div>
+                    </div>
+                    <div><label style="font-size:0.7rem">Notes</label><textarea name="notes" rows="2">{part.notes ?? ''}</textarea></div>
+                    <div><label style="font-size:0.7rem">Replace Photo</label><input name="photo" type="file" accept="image/*" /></div>
+                    <button type="submit" class="btn btn-primary" style="font-size:0.75rem">Save</button>
+                  </form>
+                </div>
+              </details>
+
+              <form method="POST" style="display:inline" onsubmit="return confirm('Remove this part?')">
+                <input type="hidden" name="_action" value="delete_part" />
+                <input type="hidden" name="partId" value={part.id} />
+                <button type="submit" class="btn btn-danger" style="font-size:0.7rem;padding:0.25rem 0.75rem">Remove</button>
+              </form>
+            </div>
+          </div>
+        ))}
+
+        <!-- Add extra part -->
+        <div style="padding:0.875rem 1rem">
+          <details>
+            <summary class="btn btn-secondary" style="font-size:0.75rem;list-style:none;cursor:pointer;display:inline-flex">+ Add Extra Part</summary>
+            <form method="POST" enctype="multipart/form-data" style="margin-top:0.75rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:0.5rem;display:flex;flex-direction:column;gap:0.75rem">
+              <input type="hidden" name="_action" value="add_part" />
+              <input type="hidden" name="slot" value="extra" />
+              <div class="form-row form-row-2">
+                <div><label style="font-size:0.7rem">Brand</label><input name="brand" type="text" placeholder="e.g. Magpul" /></div>
+                <div><label style="font-size:0.7rem">Model / Name *</label><input name="model" type="text" placeholder="e.g. PMAG 30" required /></div>
+              </div>
+              <div class="form-row form-row-2">
+                <div><label style="font-size:0.7rem">Price ($)</label><input name="price" type="number" step="0.01" min="0" /></div>
+                <div><label style="font-size:0.7rem">Link / URL</label><input name="url" type="url" placeholder="https://..." /></div>
+              </div>
+              <div><label style="font-size:0.7rem">Notes</label><textarea name="notes" rows="2" style="resize:vertical"></textarea></div>
+              <div><label style="font-size:0.7rem">Photo</label><input name="photo" type="file" accept="image/*" /></div>
+              <button type="submit" class="btn btn-primary" style="font-size:0.75rem;align-self:flex-start">Add to Build</button>
+            </form>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit build / danger zone -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--text-dim);font-size:0.75rem">◈</span>
+        <span class="section-title" style="color:var(--text-dim)">Build Settings</span>
+      </div>
+      <div class="card" style="padding:1rem">
+        <details>
+          <summary class="btn btn-secondary" style="list-style:none;cursor:pointer;display:inline-flex">Edit Build Details</summary>
+          <form method="POST" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.75rem;max-width:32rem">
+            <input type="hidden" name="_action" value="update_build" />
+            <div><label>Build Name</label><input name="name" type="text" required value={freshBuild.name} /></div>
+            <div><label>Description</label><input name="description" type="text" value={freshBuild.description ?? ''} /></div>
+            <div class="form-row form-row-2">
+              <div>
+                <label>Caliber</label>
+                <input name="caliber" type="text" list="caliber-list-edit" value={freshBuild.caliber ?? ''} />
+                <datalist id="caliber-list-edit">
+                  <option value="5.56 NATO" />
+                  <option value=".223 Rem" />
+                  <option value=".300 Blackout" />
+                  <option value="6.5 Grendel" />
+                  <option value="6.8 SPC" />
+                  <option value=".224 Valkyrie" />
+                  <option value="9mm" />
+                  <option value=".458 SOCOM" />
+                  <option value=".450 Bushmaster" />
+                </datalist>
+              </div>
+              <div>
+                <label>Gas System</label>
+                <select name="gasSystem">
+                  <option value="">— select —</option>
+                  <option value="pistol"   selected={freshBuild.gasSystem === 'pistol'}>Pistol-length</option>
+                  <option value="carbine"  selected={freshBuild.gasSystem === 'carbine'}>Carbine-length</option>
+                  <option value="mid"      selected={freshBuild.gasSystem === 'mid'}>Mid-length</option>
+                  <option value="rifle"    selected={freshBuild.gasSystem === 'rifle'}>Rifle-length</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row form-row-2">
+              <div><label>Barrel Length (inches)</label><input name="barrelLength" type="number" step="0.1" min="4" max="24" value={freshBuild.barrelLength ?? ''} /></div>
+              <div><label>Budget ($)</label><input name="budget" type="number" step="0.01" min="0" value={freshBuild.budget ?? ''} /></div>
+            </div>
+            <div>
+              <label>Status</label>
+              <select name="status">
+                <option value="planning"    selected={freshBuild.status === 'planning'}>Planning</option>
+                <option value="in_progress" selected={freshBuild.status === 'in_progress'}>In Progress</option>
+                <option value="complete"    selected={freshBuild.status === 'complete'}>Complete</option>
+              </select>
+            </div>
+            <div><label>Notes</label><textarea name="notes" rows="3">{freshBuild.notes ?? ''}</textarea></div>
+            <button type="submit" class="btn btn-primary" style="align-self:flex-start">Save Changes</button>
+          </form>
+        </details>
+
+        <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <form method="POST" onsubmit="return confirm('Delete this entire build and all its parts? This cannot be undone.')">
+            <input type="hidden" name="_action" value="delete_build" />
+            <button type="submit" class="btn btn-danger">Delete Build</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</Layout>

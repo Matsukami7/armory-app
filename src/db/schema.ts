@@ -260,3 +260,30 @@ export const dopeEntries = sqliteTable('dope_entries', {
   windMrad: real('wind_mrad'),
   notes: text('notes'),
 });
+
+export const arBuilds = sqliteTable('ar_builds', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  caliber: text('caliber'),
+  gasSystem: text('gas_system'), // pistol | carbine | mid | rifle
+  barrelLength: real('barrel_length'), // inches
+  budget: real('budget'),
+  status: text('status').notNull().default('planning'), // planning | in_progress | complete
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const arBuildParts = sqliteTable('ar_build_parts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  buildId: integer('build_id').notNull().references(() => arBuilds.id, { onDelete: 'cascade' }),
+  slot: text('slot').notNull(), // lower_receiver | upper_receiver | barrel | bcg | charging_handle | handguard | muzzle_device | trigger | buffer_system | stock_brace | grip | optic | extra
+  brand: text('brand'),
+  model: text('model'),
+  price: real('price'),
+  url: text('url'),
+  status: text('status').notNull().default('wanted'), // wanted | ordered | acquired
+  notes: text('notes'),
+  photoPath: text('photo_path'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});

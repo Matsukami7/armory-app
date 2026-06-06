@@ -1,0 +1,96 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { arBuilds } from '../../db/schema';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const [inserted] = await db.insert(arBuilds).values({
+    name:        form.get('name') as string,
+    description: form.get('description') as string || null,
+    caliber:     form.get('caliber') as string || null,
+    gasSystem:   form.get('gasSystem') as string || null,
+    barrelLength: form.get('barrelLength') ? parseFloat(form.get('barrelLength') as string) : null,
+    budget:      form.get('budget') ? parseFloat(form.get('budget') as string) : null,
+    status:      form.get('status') as string || 'planning',
+    notes:       form.get('notes') as string || null,
+  }).returning({ id: arBuilds.id });
+  return Astro.redirect(`/builds/${inserted.id}`);
+}
+---
+
+<Layout title="New AR Build" backHref="/builds">
+
+  <form method="POST" class="form-section" style="max-width:36rem">
+
+    <div>
+      <label>Build Name *</label>
+      <input name="name" type="text" required placeholder="e.g. 10.5&quot; SBR Pistol Build" />
+    </div>
+
+    <div>
+      <label>Description</label>
+      <input name="description" type="text" placeholder="Short description or purpose" />
+    </div>
+
+    <div class="form-row form-row-2">
+      <div>
+        <label>Caliber</label>
+        <input name="caliber" type="text" list="caliber-list" placeholder="5.56 NATO" />
+        <datalist id="caliber-list">
+          <option value="5.56 NATO" />
+          <option value=".223 Rem" />
+          <option value=".300 Blackout" />
+          <option value="6.5 Grendel" />
+          <option value="6.8 SPC" />
+          <option value=".224 Valkyrie" />
+          <option value="9mm" />
+          <option value=".458 SOCOM" />
+          <option value=".450 Bushmaster" />
+        </datalist>
+      </div>
+      <div>
+        <label>Gas System</label>
+        <select name="gasSystem">
+          <option value="">— select —</option>
+          <option value="pistol">Pistol-length</option>
+          <option value="carbine">Carbine-length</option>
+          <option value="mid">Mid-length</option>
+          <option value="rifle">Rifle-length</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row form-row-2">
+      <div>
+        <label>Barrel Length (inches)</label>
+        <input name="barrelLength" type="number" step="0.1" min="4" max="24" placeholder="e.g. 16" />
+      </div>
+      <div>
+        <label>Budget ($)</label>
+        <input name="budget" type="number" step="0.01" min="0" placeholder="e.g. 1500" />
+      </div>
+    </div>
+
+    <div>
+      <label>Status</label>
+      <select name="status">
+        <option value="planning">Planning</option>
+        <option value="in_progress">In Progress</option>
+        <option value="complete">Complete</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Notes</label>
+      <textarea name="notes" rows="3" placeholder="Goals, constraints, inspiration..."></textarea>
+    </div>
+
+    <div style="display:flex;gap:0.75rem">
+      <button type="submit" class="btn btn-primary">Create Build</button>
+      <a href="/builds" class="btn btn-secondary">Cancel</a>
+    </div>
+
+  </form>
+
+</Layout>
