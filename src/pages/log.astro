@@ -1,8 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
-import { firearms, ammoInventory, rangeSessions, sessionFirearms } from '../db/schema';
-import { sql, eq } from 'drizzle-orm';
+import { firearms, ammoInventory, rangeSessions, sessionFirearms, rangeMemberships } from '../db/schema';
+import { sql, eq, desc, isNotNull } from 'drizzle-orm';
 
 let successMsg = '';
 let errorMsg = '';
@@ -12,6 +12,7 @@ if (Astro.request.method === 'POST') {
   const firearmId  = parseInt(form.get('firearmId') as string);
   const roundsFired = parseInt(form.get('roundsFired') as string) || 0;
   const ammoId     = form.get('ammoId') ? parseInt(form.get('ammoId') as string) : null;
+  const location   = (form.get('location') as string || '').trim() || null;
 
   if (!isNaN(firearmId) && roundsFired > 0) {
     const today = new Date().toISOString().split('T')[0];
@@ -21,8 +22,11 @@ if (Astro.request.method === 'POST') {
     let sessionId: number;
     if (existing) {
       sessionId = existing.id;
+      if (location && !existing.location) {
+        await db.update(rangeSessions).set({ location }).where(eq(rangeSessions.id, sessionId));
+      }
     } else {
-      const result = await db.insert(rangeSessions).values({ date: today }).returning({ id: rangeSessions.id });
+      const result = await db.insert(rangeSessions).values({ date: today, location }).returning({ id: rangeSessions.id });
       sessionId = result[0].id;
     }
 
@@ -43,6 +47,12 @@ const allFirearms = await db.select().from(firearms).orderBy(firearms.name);
 const allAmmo     = await db.select().from(ammoInventory).where(sql`quantity > 0`).orderBy(ammoInventory.caliber);
 const today       = new Date().toISOString().split('T')[0];
 const [todaySession] = await db.select().from(rangeSessions).where(eq(rangeSessions.date, today)).limit(1);
+
+const locationRows  = await db.selectDistinct({ location: rangeSessions.location }).from(rangeSessions).where(isNotNull(rangeSessions.location)).orderBy(rangeSessions.location);
+const pastLocations = locationRows.map(r => r.location as string);
+const [lastSession] = await db.select({ location: rangeSessions.location }).from(rangeSessions).where(isNotNull(rangeSessions.location)).orderBy(desc(rangeSessions.date)).limit(1);
+const [activeMembership] = await db.select({ name: rangeMemberships.name }).from(rangeMemberships).where(eq(rangeMemberships.status, 'active')).limit(1);
+const defaultLocation = todaySession?.location ?? lastSession?.location ?? activeMembership?.name ?? '';
 ---
 
 <Layout title="Quick Log" sub="Fast round-count entry">
@@ -89,6 +99,14 @@ const [todaySession] = await db.select().from(rangeSessions).where(eq(rangeSessi
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label>Location / Range <span style="color:var(--text-dim);font-weight:400">(optional — links session to a range membership)</span></label>
+          <input name="location" type="text" list="ql-locations" value={defaultLocation} placeholder="e.g. Oakwood Indoor Range" />
+          <datalist id="ql-locations">
+            {pastLocations.map(loc => <option value={loc} />)}
+          </datalist>
         </div>
 
         <button type="submit" class="btn btn-primary btn-full" style="font-size:1rem;padding:0.875rem">

@@ -4,6 +4,16 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.3.1] — 2026-07-11
+
+### Added
+- **Quick Log location field** — optional Location / Range input on the Quick Log page so sessions it creates count toward range memberships
+  - Prefilled from today's session, the most recent session's location, or the active membership name
+  - Past-locations autocomplete (same datalist as New Session)
+  - Backfills the location onto today's session if it was created earlier without one (never overwrites an existing location)
+
+---
+
 ## [1.3.0] — 2026-06-06
 
 ### Added
