@@ -146,6 +146,13 @@ A self-hosted firearms tracker and range log. Track your collection, log range s
 - Optionally link footage to a specific range session
 - **Session clips** — upload short clips directly from the session detail page; they appear inline with a player
 
+### USPSA Matches
+- Log USPSA matches (`/matches`) with the same fields shown in the PractiScore app: overall place/%, points lost (PL), average points lost (APL), points %, total time, and A/C/D/M/NS hit counts
+- Add stages one at a time with place/%, hit factor, time, and hit counts
+- **% trend chart** across matches once you've logged two or more
+- Attach video per-stage or match-wide — upload a file or paste a YouTube/Vimeo URL; clips also appear in the Footage library linked back to their match
+- Manual entry by design — PractiScore results pages sit behind Cloudflare bot protection and can't be scraped, so this mirrors what you see in the app after each match
+
 ### Printable Range Card
 - Generate a blank range card to take to the range for handwritten notes
 - Pre-select firearms you're bringing — they populate the firearm column automatically
@@ -249,6 +256,11 @@ Open `http://<your-server-ip>:4321`.
 - **Short clips:** open a session, scroll to **Video Clips**, and upload an mp4/mov/webm file
 - **Helmet cam / body cam:** go to **Footage** in the sidebar, click **+ Add Footage**, and either upload a file or paste a YouTube/Vimeo URL
 - For large files (multi-GB recordings) that are impractical to upload through a browser, drop them directly into `data/uploads/footage/` on your server, then add an entry in the Footage library manually
+
+### Logging a USPSA match
+1. After scores post to PractiScore, click **Matches** → **+ Log Match** and transcribe the overall results shown in the PractiScore app
+2. On the match detail page, use **+ Add Stage** to log each stage one at a time
+3. Attach video with **+ Add Video to Stage** (per-stage) or **+ Add Whole-Match Video** (walkthroughs) — upload a file or paste a YouTube/Vimeo link
 
 ### Maintenance reminders
 1. On a firearm's **Edit** page, set a **Service Interval (rounds)** and/or **Cleaning Interval (days)**
