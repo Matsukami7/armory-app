@@ -1,0 +1,158 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { uspsaMatches } from '../../db/schema';
+import { eq, sql } from 'drizzle-orm';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+  if (action === 'delete') {
+    await db.delete(uspsaMatches).where(eq(uspsaMatches.id, parseInt(form.get('id') as string)));
+  }
+  return Astro.redirect('/matches');
+}
+
+const matches = await db.select().from(uspsaMatches).orderBy(sql`date DESC`);
+
+const trendPoints = [...matches]
+  .filter(m => m.overallPercent != null)
+  .reverse()
+  .map(m => ({ date: m.date, value: m.overallPercent! }));
+
+const MATCH_LEVEL_LABEL: Record<string, string> = {
+  club: 'Club', area: 'Area', state: 'State', national: 'National',
+};
+---
+
+<Layout title="Matches" sub={`${matches.length} USPSA match${matches.length !== 1 ? 'es' : ''} logged`}>
+  <slot name="actions" slot="actions">
+    <a href="/matches/new" class="btn btn-primary">+ Log Match</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:56rem">
+
+    {trendPoints.length >= 2 && (
+      <div>
+        <div class="section-header">
+          <span style="color:var(--accent);font-size:0.75rem">▼</span>
+          <span class="section-title">Match % Trend</span>
+        </div>
+        <div class="card" style="padding:1.25rem">
+          <canvas
+            data-chart={JSON.stringify({ labels: trendPoints.map(p => p.date), values: trendPoints.map(p => p.value), unit: 'percent' })}
+            style="width:100%;height:140px" height="140"
+          ></canvas>
+        </div>
+      </div>
+    )}
+
+    {matches.length === 0 && (
+      <div class="empty-state">
+        <div style="font-size:2rem;margin-bottom:0.5rem">🏆</div>
+        <div style="font-weight:600;color:var(--text);margin-bottom:0.25rem">No matches logged yet</div>
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1rem">Log your USPSA matches and stages after they're posted to PractiScore.</div>
+        <a href="/matches/new" class="btn btn-primary">+ Log Match</a>
+      </div>
+    )}
+
+    {matches.map(m => (
+      <a href={`/matches/${m.id}`} style="text-decoration:none">
+        <div class="card" style="padding:1.25rem;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor=''">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+            <div>
+              <div style="display:flex;align-items:center;gap:0.625rem;flex-wrap:wrap">
+                <span style="font-size:1rem;font-weight:700;color:var(--text)">{m.name}</span>
+                {m.matchLevel && (
+                  <span style="font-size:0.65rem;font-weight:600;color:var(--text-dim);background:var(--bg-hover);padding:0.15rem 0.5rem;border-radius:9999px">
+                    {MATCH_LEVEL_LABEL[m.matchLevel] ?? m.matchLevel}
+                  </span>
+                )}
+              </div>
+              <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.375rem">
+                <span style="font-size:0.8125rem;color:var(--text-muted)">{m.date}</span>
+                {m.location && <span class="pill pill-default">{m.location}</span>}
+                {m.division && <span class="pill pill-default">{m.division}</span>}
+              </div>
+            </div>
+            {(m.overallPlace != null || m.overallPercent != null) && (
+              <div style="text-align:right;flex-shrink:0">
+                {m.overallPlace != null && <div style="font-size:1.1rem;font-weight:700;color:var(--accent)">#{m.overallPlace}</div>}
+                {m.overallPercent != null && <div style="font-size:0.7rem;color:var(--text-dim)">{m.overallPercent.toFixed(2)}%</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      </a>
+    ))}
+
+  </div>
+</Layout>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue('--accent').trim() || '#06b6d4';
+  const border = style.getPropertyValue('--border').trim() || '#1e2433';
+
+  document.querySelectorAll<HTMLCanvasElement>('canvas[data-chart]').forEach(canvas => {
+    const { labels, values } = JSON.parse(canvas.dataset.chart!);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = canvas.offsetWidth || 300;
+    const h = canvas.offsetHeight || 140;
+    canvas.width  = w * devicePixelRatio;
+    canvas.height = h * devicePixelRatio;
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+
+    const pad = { top: 10, right: 10, bottom: 28, left: 40 };
+    const cw = w - pad.left - pad.right;
+    const ch = h - pad.top - pad.bottom;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+
+    const xPos = (i: number) => pad.left + (i / (values.length - 1)) * cw;
+    const yPos = (v: number) => pad.top + ch - ((v - min) / range) * ch;
+
+    ctx.strokeStyle = border; ctx.lineWidth = 1;
+    [0, 0.5, 1].forEach(t => {
+      const y = pad.top + t * ch;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+      ctx.fillStyle = '#6b7280'; ctx.font = '10px ui-monospace,monospace'; ctx.textAlign = 'right';
+      const val = max - t * range;
+      ctx.fillText(`${val.toFixed(1)}%`, pad.left - 4, y + 3.5);
+    });
+
+    ctx.beginPath();
+    ctx.moveTo(xPos(0), yPos(values[0]));
+    values.forEach((v: number, i: number) => { if (i > 0) ctx.lineTo(xPos(i), yPos(v)); });
+    ctx.lineTo(xPos(values.length - 1), pad.top + ch);
+    ctx.lineTo(xPos(0), pad.top + ch);
+    ctx.closePath();
+    ctx.fillStyle = accent + '22'; ctx.fill();
+
+    ctx.beginPath(); ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    values.forEach((v: number, i: number) => i === 0 ? ctx.moveTo(xPos(i), yPos(v)) : ctx.lineTo(xPos(i), yPos(v)));
+    ctx.stroke();
+
+    const bestVal = Math.max(...values);
+    values.forEach((v: number, i: number) => {
+      const isBest = v === bestVal;
+      ctx.beginPath();
+      ctx.arc(xPos(i), yPos(v), isBest ? 5 : 3, 0, Math.PI * 2);
+      ctx.fillStyle = isBest ? '#22c55e' : accent;
+      ctx.fill();
+      ctx.strokeStyle = '#0b0e14'; ctx.lineWidth = 1.5; ctx.stroke();
+    });
+
+    values.forEach((_: number, i: number) => {
+      if (i === 0 || i === values.length - 1 || values.length <= 6) {
+        ctx.fillStyle = '#6b7280'; ctx.font = '9px ui-sans-serif,sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(labels[i].slice(5), xPos(i), h - 6);
+      }
+    });
+  });
+});
+</script>

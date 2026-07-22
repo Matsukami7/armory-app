@@ -1,0 +1,335 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { uspsaMatches, uspsaStages, footage } from '../../db/schema';
+import { eq, asc } from 'drizzle-orm';
+import { saveUpload, embedUrl } from '../../lib/uploads';
+
+const id = parseInt(Astro.params.id!);
+if (isNaN(id)) return Astro.redirect('/matches');
+
+const [match] = await db.select().from(uspsaMatches).where(eq(uspsaMatches.id, id));
+if (!match) return Astro.redirect('/matches');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+  const int = (key: string) => form.get(key) ? parseInt(form.get(key) as string) : null;
+  const num = (key: string) => form.get(key) ? parseFloat(form.get(key) as string) : null;
+
+  if (action === 'delete') {
+    await db.delete(uspsaMatches).where(eq(uspsaMatches.id, id));
+    return Astro.redirect('/matches');
+  }
+  if (action === 'add_stage') {
+    await db.insert(uspsaStages).values({
+      matchId:       id,
+      stageNumber:   parseInt(form.get('stageNumber') as string),
+      stageName:     form.get('stageName') as string || null,
+      place:         int('place'),
+      percent:       num('percent'),
+      pointsLost:    num('pointsLost'),
+      pointsPercent: num('pointsPercent'),
+      hitFactor:     num('hitFactor'),
+      time:          num('time'),
+      countA:        int('countA'),
+      countC:        int('countC'),
+      countD:        int('countD'),
+      countM:        int('countM'),
+      countNs:       int('countNs'),
+      notes:         form.get('notes') as string || null,
+    });
+  }
+  if (action === 'remove_stage') {
+    await db.delete(uspsaStages).where(eq(uspsaStages.id, parseInt(form.get('stageId') as string)));
+  }
+  if (action === 'add_video') {
+    const file = form.get('file') as File | null;
+    const externalUrl = form.get('externalUrl') as string || null;
+    const stageId = form.get('stageId') ? parseInt(form.get('stageId') as string) : null;
+    let path: string | null = null;
+    if (file && file.size > 0) path = await saveUpload(file, 'footage');
+    if (path || externalUrl) {
+      await db.insert(footage).values({
+        title:        form.get('title') as string || match.name,
+        date:         match.date,
+        path,
+        externalUrl,
+        uspsaMatchId: id,
+        uspsaStageId: stageId,
+        notes:        form.get('notes') as string || null,
+      });
+    }
+  }
+  if (action === 'remove_video') {
+    await db.delete(footage).where(eq(footage.id, parseInt(form.get('videoId') as string)));
+  }
+  return Astro.redirect(`/matches/${id}`);
+}
+
+const stages = await db.select().from(uspsaStages).where(eq(uspsaStages.matchId, id)).orderBy(asc(uspsaStages.stageNumber));
+const videos = await db.select().from(footage).where(eq(footage.uspsaMatchId, id));
+const matchVideos = videos.filter(v => v.uspsaStageId === null);
+const videosByStage = new Map<number, typeof videos>();
+for (const v of videos) {
+  if (v.uspsaStageId === null) continue;
+  if (!videosByStage.has(v.uspsaStageId)) videosByStage.set(v.uspsaStageId, []);
+  videosByStage.get(v.uspsaStageId)!.push(v);
+}
+
+const nextStageNumber = (stages[stages.length - 1]?.stageNumber ?? 0) + 1;
+
+function renderVideo(v: typeof videos[number]) {
+  const embed = v.externalUrl ? embedUrl(v.externalUrl) : null;
+  return { v, embed };
+}
+---
+
+<Layout
+  title={match.name}
+  sub={[match.date, match.location, match.division].filter(Boolean).join(' · ')}
+  backHref="/matches"
+>
+  <slot name="actions" slot="actions">
+    <a href={`/matches/${id}/edit`} class="btn btn-secondary">Edit</a>
+  </slot>
+
+  <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:52rem">
+
+    <!-- Overview -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem">
+      {match.overallPlace != null && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Place</div>
+            <div class="stat-card-value" style="color:var(--accent)">#{match.overallPlace}</div>
+          </div>
+        </div>
+      )}
+      {match.overallPercent != null && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Overall %</div>
+            <div class="stat-card-value" style="color:var(--accent)">{match.overallPercent.toFixed(2)}%</div>
+          </div>
+        </div>
+      )}
+      {match.pointsLost != null && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Points Lost</div>
+            <div class="stat-card-value">{match.pointsLost}</div>
+            {match.avgPointsLost != null && <div class="stat-card-sub">avg {match.avgPointsLost}</div>}
+          </div>
+        </div>
+      )}
+      {match.totalTime != null && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Total Time</div>
+            <div class="stat-card-value">{match.totalTime}s</div>
+          </div>
+        </div>
+      )}
+      {(match.countA != null || match.countC != null) && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">A/C/D/M/NS</div>
+            <div style="font-size:0.875rem;font-weight:700;color:var(--text);margin-top:0.25rem">
+              {match.countA ?? 0}/{match.countC ?? 0}/{match.countD ?? 0}/{match.countM ?? 0}/{match.countNs ?? 0}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+
+    {match.notes && (
+      <div class="card" style="padding:1.25rem">
+        <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem">Notes</div>
+        <p style="font-size:0.875rem;color:var(--text-muted);line-height:1.6">{match.notes}</p>
+      </div>
+    )}
+
+    <!-- Stages -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">◎</span>
+        <span class="section-title">Stages</span>
+      </div>
+      {stages.length > 0 && (
+        <div class="card card-divide" style="margin-bottom:0.75rem">
+          {stages.map(s => {
+            const stageVideos = videosByStage.get(s.id) ?? [];
+            return (
+              <div class="list-row" style="flex-direction:column;align-items:stretch;gap:0.625rem">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:0.625rem;flex-wrap:wrap">
+                      <span style="font-size:0.875rem;font-weight:700;color:var(--text)">
+                        Stage {s.stageNumber}{s.stageName ? ` — ${s.stageName}` : ''}
+                      </span>
+                      {s.place != null && <span class="pill pill-default">#{s.place}</span>}
+                      {s.percent != null && <span class="pill pill-accent">{s.percent.toFixed(2)}%</span>}
+                    </div>
+                    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.25rem;font-size:0.75rem;color:var(--text-muted)">
+                      {s.hitFactor != null && <span>HF {s.hitFactor}</span>}
+                      {s.time != null && <span>{s.time}s</span>}
+                      {(s.countA != null || s.countC != null) && (
+                        <span>{s.countA ?? 0}/{s.countC ?? 0}/{s.countD ?? 0}/{s.countM ?? 0}/{s.countNs ?? 0}</span>
+                      )}
+                    </div>
+                    {s.notes && <div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.2rem">{s.notes}</div>}
+                  </div>
+                  <form method="POST" onsubmit="return confirm('Delete this stage?')">
+                    <input type="hidden" name="_action" value="remove_stage" />
+                    <input type="hidden" name="stageId" value={s.id} />
+                    <button type="submit" class="btn-delete">✕</button>
+                  </form>
+                </div>
+
+                {stageVideos.length > 0 && (
+                  <div style="display:flex;flex-direction:column;gap:0.625rem">
+                    {stageVideos.map(v => {
+                      const { embed } = renderVideo(v);
+                      return (
+                        <div style="display:flex;flex-direction:column;gap:0.375rem">
+                          {v.path && (
+                            <video controls preload="metadata" style="width:100%;max-height:16rem;border-radius:0.375rem;background:#000;display:block">
+                              <source src={v.path} />
+                            </video>
+                          )}
+                          {v.externalUrl && embed && (
+                            <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:0.375rem;overflow:hidden">
+                              <iframe src={embed} style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen />
+                            </div>
+                          )}
+                          {v.externalUrl && !embed && (
+                            <a href={v.externalUrl} target="_blank" rel="noopener" style="font-size:0.8rem;color:var(--accent)">Watch on external site →</a>
+                          )}
+                          <form method="POST" onsubmit="return confirm('Remove this video?')" style="align-self:flex-end">
+                            <input type="hidden" name="_action" value="remove_video" />
+                            <input type="hidden" name="videoId" value={v.id} />
+                            <button type="submit" class="btn-delete" style="font-size:0.65rem">✕ remove video</button>
+                          </form>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <details class="accordion">
+                  <summary style="font-size:0.72rem">+ Add Video to Stage {s.stageNumber}</summary>
+                  <form method="POST" enctype="multipart/form-data" class="form-section">
+                    <input type="hidden" name="_action" value="add_video" />
+                    <input type="hidden" name="stageId" value={s.id} />
+                    <div><label>Title</label><input name="title" type="text" placeholder={`Stage ${s.stageNumber}`} /></div>
+                    <div><label>Upload Video File</label><input name="file" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" /></div>
+                    <div><label>or External URL</label><input name="externalUrl" type="url" placeholder="https://youtube.com/watch?v=..." /></div>
+                    <button type="submit" class="btn btn-primary">Add Video</button>
+                  </form>
+                </details>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <details class="accordion">
+        <summary>+ Add Stage</summary>
+        <form method="POST" class="form-section">
+          <input type="hidden" name="_action" value="add_stage" />
+          <div class="form-row form-row-2">
+            <div><label>Stage Number *</label><input name="stageNumber" type="number" min="1" required value={nextStageNumber} /></div>
+            <div><label>Stage Name</label><input name="stageName" type="text" placeholder="Optional" /></div>
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Place</label><input name="place" type="number" min="1" placeholder="3" /></div>
+            <div><label>Percent</label><input name="percent" type="number" step="0.01" min="0" max="100" placeholder="58.38" /></div>
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Hit Factor</label><input name="hitFactor" type="number" step="0.0001" placeholder="3.1928" /></div>
+            <div><label>Time (s)</label><input name="time" type="number" step="0.01" placeholder="16.60" /></div>
+          </div>
+          <div class="form-row form-row-2">
+            <div><label>Points Lost</label><input name="pointsLost" type="number" step="0.01" placeholder="37.46" /></div>
+            <div><label>Points %</label><input name="pointsPercent" type="number" step="0.01" min="0" max="100" placeholder="81" /></div>
+          </div>
+          <div>
+            <label>Hit Counts — A / C / D / M / NS</label>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.5rem">
+              <input name="countA" type="number" min="0" placeholder="A" />
+              <input name="countC" type="number" min="0" placeholder="C" />
+              <input name="countD" type="number" min="0" placeholder="D" />
+              <input name="countM" type="number" min="0" placeholder="M" />
+              <input name="countNs" type="number" min="0" placeholder="NS" />
+            </div>
+          </div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          <button type="submit" class="btn btn-primary">Add Stage</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Match Videos (not tied to a specific stage) -->
+    <div>
+      <div class="section-header">
+        <span style="color:var(--accent);font-size:0.75rem">▶</span>
+        <span class="section-title">Match Videos</span>
+        {matchVideos.length > 0 && (
+          <a href="/footage" style="margin-left:auto;font-size:0.7rem;color:var(--accent);text-decoration:none;opacity:0.8">All Footage →</a>
+        )}
+      </div>
+      {matchVideos.length > 0 && (
+        <div style="display:flex;flex-direction:column;gap:0.875rem;margin-bottom:0.75rem">
+          {matchVideos.map(v => {
+            const { embed } = renderVideo(v);
+            return (
+              <div class="card" style="padding:1rem">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.625rem">
+                  <div style="font-size:0.875rem;font-weight:600;color:var(--text)">{v.title}</div>
+                  <form method="POST" onsubmit="return confirm('Remove this video?')">
+                    <input type="hidden" name="_action" value="remove_video" />
+                    <input type="hidden" name="videoId" value={v.id} />
+                    <button type="submit" class="btn-delete">✕</button>
+                  </form>
+                </div>
+                {v.notes && <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem">{v.notes}</div>}
+                {v.path && (
+                  <video controls preload="metadata" style="width:100%;max-height:20rem;border-radius:0.25rem;background:#000;display:block">
+                    <source src={v.path} />
+                  </video>
+                )}
+                {v.externalUrl && embed && (
+                  <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:0.375rem;overflow:hidden">
+                    <iframe src={embed} style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen />
+                  </div>
+                )}
+                {v.externalUrl && !embed && (
+                  <a href={v.externalUrl} target="_blank" rel="noopener" style="font-size:0.8rem;color:var(--accent)">Watch on external site →</a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <details class="accordion">
+        <summary>+ Add Whole-Match Video</summary>
+        <form method="POST" enctype="multipart/form-data" class="form-section">
+          <input type="hidden" name="_action" value="add_video" />
+          <div><label>Title</label><input name="title" type="text" placeholder={match.name} /></div>
+          <div><label>Upload Video File</label><input name="file" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" /></div>
+          <div><label>or External URL</label><input name="externalUrl" type="url" placeholder="https://youtube.com/watch?v=..." /></div>
+          <div><label>Notes</label><input name="notes" type="text" placeholder="Optional" /></div>
+          <button type="submit" class="btn btn-primary">Add Video</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Delete -->
+    <form method="POST" onsubmit="return confirm('Delete this match and all its stages?')">
+      <input type="hidden" name="_action" value="delete" />
+      <button type="submit" class="btn btn-danger btn-full">Delete Match</button>
+    </form>
+
+  </div>
+</Layout>

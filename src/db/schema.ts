@@ -132,6 +132,48 @@ export const magazines = sqliteTable('magazines', {
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
+export const uspsaMatches = sqliteTable('uspsa_matches', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  date: text('date').notNull(),
+  location: text('location'),
+  division: text('division'), // Open, Limited, Limited 10, PCC, Carry Optics, Production, Single Stack, Revolver, Limited Optics
+  matchLevel: text('match_level'), // club, area, state, national
+  overallPlace: integer('overall_place'),
+  overallPercent: real('overall_percent'),
+  pointsLost: real('points_lost'),        // PL
+  avgPointsLost: real('avg_points_lost'), // APL
+  pointsPercent: real('points_percent'),  // Pts %
+  totalTime: real('total_time'),
+  countA: integer('count_a'),
+  countC: integer('count_c'),
+  countD: integer('count_d'),
+  countM: integer('count_m'),
+  countNs: integer('count_ns'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
+export const uspsaStages = sqliteTable('uspsa_stages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  matchId: integer('match_id').notNull().references(() => uspsaMatches.id, { onDelete: 'cascade' }),
+  stageNumber: integer('stage_number').notNull(),
+  stageName: text('stage_name'),
+  place: integer('place'),
+  percent: real('percent'),
+  pointsLost: real('points_lost'),
+  pointsPercent: real('points_percent'),
+  hitFactor: real('hit_factor'),
+  time: real('time'),
+  countA: integer('count_a'),
+  countC: integer('count_c'),
+  countD: integer('count_d'),
+  countM: integer('count_m'),
+  countNs: integer('count_ns'),
+  notes: text('notes'),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
 export const footage = sqliteTable('footage', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
@@ -139,6 +181,8 @@ export const footage = sqliteTable('footage', {
   path: text('path'),          // upload path (null if external)
   externalUrl: text('external_url'), // YouTube/Vimeo/etc URL (null if uploaded)
   sessionId: integer('session_id').references(() => rangeSessions.id, { onDelete: 'set null' }),
+  uspsaMatchId: integer('uspsa_match_id').references(() => uspsaMatches.id, { onDelete: 'set null' }),
+  uspsaStageId: integer('uspsa_stage_id').references(() => uspsaStages.id, { onDelete: 'set null' }),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });

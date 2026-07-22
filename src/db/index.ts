@@ -125,6 +125,48 @@ sqlite.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS uspsa_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    date TEXT NOT NULL,
+    location TEXT,
+    division TEXT,
+    match_level TEXT,
+    overall_place INTEGER,
+    overall_percent REAL,
+    points_lost REAL,
+    avg_points_lost REAL,
+    points_percent REAL,
+    total_time REAL,
+    count_a INTEGER,
+    count_c INTEGER,
+    count_d INTEGER,
+    count_m INTEGER,
+    count_ns INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS uspsa_stages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id INTEGER NOT NULL REFERENCES uspsa_matches(id) ON DELETE CASCADE,
+    stage_number INTEGER NOT NULL,
+    stage_name TEXT,
+    place INTEGER,
+    percent REAL,
+    points_lost REAL,
+    points_percent REAL,
+    hit_factor REAL,
+    time REAL,
+    count_a INTEGER,
+    count_c INTEGER,
+    count_d INTEGER,
+    count_m INTEGER,
+    count_ns INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS footage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -132,6 +174,8 @@ sqlite.exec(`
     path TEXT,
     external_url TEXT,
     session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL,
+    uspsa_match_id INTEGER REFERENCES uspsa_matches(id) ON DELETE SET NULL,
+    uspsa_stage_id INTEGER REFERENCES uspsa_stages(id) ON DELETE SET NULL,
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -340,6 +384,10 @@ if (!accColumns.includes('battery_changed_date')) sqlite.exec("ALTER TABLE acces
 
 const drillColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('drills')").all() as { name: string }[]).map(r => r.name);
 if (!drillColumns.includes('par_time')) sqlite.exec("ALTER TABLE drills ADD COLUMN par_time REAL");
+
+const footageColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('footage')").all() as { name: string }[]).map(r => r.name);
+if (!footageColumns.includes('uspsa_match_id')) sqlite.exec("ALTER TABLE footage ADD COLUMN uspsa_match_id INTEGER REFERENCES uspsa_matches(id) ON DELETE SET NULL");
+if (!footageColumns.includes('uspsa_stage_id')) sqlite.exec("ALTER TABLE footage ADD COLUMN uspsa_stage_id INTEGER REFERENCES uspsa_stages(id) ON DELETE SET NULL");
 
 export const db = drizzle(sqlite, { schema });
 export type DB = typeof db;
