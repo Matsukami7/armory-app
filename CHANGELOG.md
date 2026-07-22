@@ -4,6 +4,14 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.5.2] — 2026-07-22
+
+### Fixed
+- **CSRF Origin check broke form submissions behind a TLS-terminating reverse proxy.** Re-enabling Astro's built-in Origin check in 1.5.1 broke form submissions ("Cross-site POST form submissions are forbidden") for anyone running behind a reverse proxy that terminates HTTPS, because Astro computes the request's own origin from the raw socket — which is always plain HTTP from the app's point of view — while the browser's real `Origin` header is `https://`. The `ORIGIN` env var this app has always documented was never actually wired into anything and silently did nothing.
+- Replaced Astro's built-in check with an equivalent one in `src/middleware/index.ts` that correctly trusts the `ORIGIN` env var as the source of truth when set. No config changes needed if you already had `ORIGIN` set per the docs — it will just start working.
+
+---
+
 ## [1.5.1] — 2026-07-22
 
 ### Security
