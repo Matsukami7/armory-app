@@ -190,7 +190,7 @@ const [rRow]     = await db.select({ total: sum(sessionFirearms.roundsFired) }).
 const totalRounds = Number(rRow?.total ?? 0);
 
 const gunTags = parseTags(gun.tags);
-const typeLabel: Record<string, string> = { pistol:'Pistol', rifle:'Rifle', shotgun:'Shotgun', revolver:'Revolver', other:'Other' };
+const typeLabel: Record<string, string> = { pistol:'Pistol', rifle:'Rifle', shotgun:'Shotgun', revolver:'Revolver', nfa:'NFA Item', other:'Other' };
 const logIcon:   Record<string, string> = { cleaning:'🧹', repair:'🔧', inspection:'🔍', modification:'⚙️', note:'📝' };
 
 // Cleaning status

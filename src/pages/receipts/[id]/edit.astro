@@ -1,0 +1,162 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../db';
+import { receipts, rangeSessions, ammoPurchases, ammoInventory } from '../../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+import { saveUpload } from '../../../lib/uploads';
+
+const id = parseInt(Astro.params.id!);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action');
+
+  if (action === 'delete') {
+    await db.delete(receipts).where(eq(receipts.id, id));
+    return Astro.redirect('/receipts');
+  }
+
+  // update
+  const file = form.get('file') as File | null;
+  let photoPath: string | null | undefined = undefined;
+  if (file && file.size > 0) {
+    photoPath = await saveUpload(file, 'receipts');
+  }
+  if (form.get('clearPhoto') === '1') {
+    photoPath = null;
+  }
+
+  const sessionIdRaw      = form.get('sessionId') as string;
+  const ammoPurchaseIdRaw = form.get('ammoPurchaseId') as string;
+  const sessionId         = sessionIdRaw ? parseInt(sessionIdRaw) : null;
+  const ammoPurchaseId    = ammoPurchaseIdRaw ? parseInt(ammoPurchaseIdRaw) : null;
+
+  await db.update(receipts).set({
+    date:           form.get('date') as string,
+    vendor:         form.get('vendor') as string || null,
+    total:          parseFloat(form.get('total') as string),
+    category:       form.get('category') as string || 'other',
+    notes:          form.get('notes') as string || null,
+    sessionId:      sessionId && !isNaN(sessionId) ? sessionId : null,
+    ammoPurchaseId: ammoPurchaseId && !isNaN(ammoPurchaseId) ? ammoPurchaseId : null,
+    ...(photoPath !== undefined ? { photoPath } : {}),
+  }).where(eq(receipts.id, id));
+
+  return Astro.redirect('/receipts');
+}
+
+const [r] = await db.select().from(receipts).where(eq(receipts.id, id));
+if (!r) return Astro.redirect('/receipts');
+
+const allSessions = await db
+  .select({ id: rangeSessions.id, date: rangeSessions.date, location: rangeSessions.location })
+  .from(rangeSessions)
+  .orderBy(desc(rangeSessions.date));
+
+const allAmmoPurchases = await db
+  .select({
+    pid:     ammoPurchases.id,
+    pdate:   ammoPurchases.date,
+    pqty:    ammoPurchases.quantity,
+    pcost:   ammoPurchases.totalCost,
+    brand:   ammoInventory.brand,
+    caliber: ammoInventory.caliber,
+    grain:   ammoInventory.grain,
+  })
+  .from(ammoPurchases)
+  .leftJoin(ammoInventory, eq(ammoPurchases.ammoId, ammoInventory.id))
+  .orderBy(desc(ammoPurchases.date));
+
+const isPdf = r.photoPath && /\.(pdf|doc|docx|txt)$/i.test(r.photoPath);
+---
+
+<Layout title="Edit Receipt" sub={r.date} backHref="/receipts">
+
+  <form method="POST" enctype="multipart/form-data" class="card" style="padding:1.5rem;max-width:42rem">
+    <div class="form-section">
+
+      <div class="form-row form-row-2">
+        <div><label>Date *</label><input name="date" type="date" required value={r.date} /></div>
+        <div><label>Total ($) *</label><input name="total" type="number" min="0" step="0.01" required value={r.total} /></div>
+      </div>
+
+      <div class="form-row form-row-2">
+        <div><label>Vendor</label><input name="vendor" type="text" value={r.vendor ?? ''} /></div>
+        <div>
+          <label>Category</label>
+          <select name="category">
+            <option value="ammo"      selected={r.category === 'ammo'}>🎯 Ammo</option>
+            <option value="range_fee" selected={r.category === 'range_fee'}>🎫 Range Fee</option>
+            <option value="gear"      selected={r.category === 'gear'}>🎒 Gear</option>
+            <option value="firearm"   selected={r.category === 'firearm'}>🔫 Firearm</option>
+            <option value="accessory" selected={r.category === 'accessory'}>🔭 Accessory</option>
+            <option value="other"     selected={r.category === 'other'}>📄 Other</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label>Link to Session</label>
+        <select name="sessionId">
+          <option value="">None</option>
+          {allSessions.map(s => (
+            <option value={s.id} selected={r.sessionId === s.id}>
+              {s.date}{s.location ? ` — ${s.location}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label>Link to Ammo Purchase</label>
+        <select name="ammoPurchaseId">
+          <option value="">None</option>
+          {allAmmoPurchases.map(p => (
+            <option value={p.pid} selected={r.ammoPurchaseId === p.pid}>
+              {p.pdate} — {p.brand ?? '?'} {p.grain ? `${p.grain}gr ` : ''}{p.caliber ?? ''} ({p.pqty}rds{p.pcost ? ` · $${p.pcost.toFixed(2)}` : ''})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {r.photoPath && (
+        <div>
+          <label>Current File</label>
+          <div style="display:flex;gap:0.875rem;align-items:flex-start">
+            {isPdf ? (
+              <a href={r.photoPath} target="_blank" rel="noopener" style="color:var(--accent);font-size:0.8125rem">📄 View attached file</a>
+            ) : (
+              <a href={r.photoPath} target="_blank" rel="noopener">
+                <img src={r.photoPath} alt="" style="max-width:14rem;max-height:14rem;border:1px solid var(--border);border-radius:0.375rem" />
+              </a>
+            )}
+            <label style="display:inline-flex;gap:0.4rem;align-items:center;font-size:0.75rem;color:var(--text-muted);cursor:pointer">
+              <input type="checkbox" name="clearPhoto" value="1" />
+              Remove current file
+            </label>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label>{r.photoPath ? 'Replace File' : 'Receipt Photo / PDF'}</label>
+        <input name="file" type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp,.heic" />
+      </div>
+
+      <div><label>Notes</label><textarea name="notes" rows="2">{r.notes ?? ''}</textarea></div>
+
+      <div style="display:flex;gap:0.5rem;justify-content:space-between;align-items:center">
+        <div style="display:flex;gap:0.5rem">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <a href="/receipts" class="btn btn-secondary">Cancel</a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <form method="POST" onsubmit="return confirm('Delete this receipt? This cannot be undone.')" style="margin-top:1.5rem;max-width:42rem">
+    <input type="hidden" name="_action" value="delete" />
+    <button type="submit" class="btn btn-danger">Delete Receipt</button>
+  </form>
+
+</Layout>

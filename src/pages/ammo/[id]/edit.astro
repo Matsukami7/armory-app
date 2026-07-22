@@ -1,8 +1,8 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import { db } from '../../../db';
-import { ammoInventory, ammoPurchases } from '../../../db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { ammoInventory, ammoPurchases, receipts } from '../../../db/schema';
+import { eq, desc, sql, inArray } from 'drizzle-orm';
 
 const id = parseInt(Astro.params.id!);
 if (isNaN(id)) return Astro.redirect('/ammo');
@@ -62,6 +62,13 @@ const purchases = await db.select().from(ammoPurchases).where(eq(ammoPurchases.a
 const totalSpent = purchases.reduce((s, p) => s + (p.totalCost ?? 0), 0);
 const today = new Date().toISOString().split('T')[0];
 
+const purchaseIds = purchases.map(p => p.id);
+const linkedReceipts = purchaseIds.length > 0
+  ? await db.select().from(receipts).where(inArray(receipts.ammoPurchaseId, purchaseIds))
+  : [];
+const receiptByPurchase = new Map<number, typeof linkedReceipts[number]>();
+for (const rc of linkedReceipts) if (rc.ammoPurchaseId) receiptByPurchase.set(rc.ammoPurchaseId, rc);
+
 // Price trend: purchases in chronological order with a cost-per-round value
 const pricePoints = [...purchases].reverse().flatMap(p =>
   p.totalCost && p.quantity > 0
@@ -120,26 +127,43 @@ const pricePoints = [...purchases].reverse().flatMap(p =>
 
       {purchases.length > 0 && (
         <div class="card card-divide" style="margin-bottom:0.75rem">
-          {purchases.map(p => (
-            <div class="list-row" style="justify-content:space-between;align-items:flex-start">
-              <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-                  <span style="font-size:0.8125rem;font-weight:600;color:var(--text)">+{p.quantity.toLocaleString()} rds</span>
-                  {p.totalCost && <span style="font-size:0.8125rem;color:#22c55e">${p.totalCost.toFixed(2)}</span>}
-                  {p.totalCost && p.quantity > 0 && <span style="font-size:0.7rem;color:var(--text-dim)">${(p.totalCost / p.quantity).toFixed(3)}/rd</span>}
+          {purchases.map(p => {
+            const rc = receiptByPurchase.get(p.id);
+            const returnTo = encodeURIComponent(`/ammo/${id}/edit`);
+            return (
+              <div class="list-row" style="justify-content:space-between;align-items:flex-start">
+                <div style="flex:1">
+                  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                    <span style="font-size:0.8125rem;font-weight:600;color:var(--text)">+{p.quantity.toLocaleString()} rds</span>
+                    {p.totalCost && <span style="font-size:0.8125rem;color:#22c55e">${p.totalCost.toFixed(2)}</span>}
+                    {p.totalCost && p.quantity > 0 && <span style="font-size:0.7rem;color:var(--text-dim)">${(p.totalCost / p.quantity).toFixed(3)}/rd</span>}
+                  </div>
+                  <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
+                    {p.date}{p.source ? ` · ${p.source}` : ''}
+                  </div>
+                  {p.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{p.notes}</div>}
+                  <div style="margin-top:0.375rem">
+                    {rc ? (
+                      <a href={`/receipts/${rc.id}/edit`} style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.7rem;color:var(--accent);text-decoration:none">
+                        {rc.photoPath && !/\.(pdf|doc|docx|txt)$/i.test(rc.photoPath) ? (
+                          <img src={rc.photoPath} alt="" style="width:1.25rem;height:1.25rem;object-fit:cover;border-radius:0.2rem;border:1px solid var(--border)" />
+                        ) : <span>🧾</span>}
+                        Receipt {rc.vendor ? `· ${rc.vendor}` : ''} →
+                      </a>
+                    ) : (
+                      <a href={`/receipts/new?ammoPurchase=${p.id}&returnTo=${returnTo}`}
+                         style="font-size:0.7rem;color:var(--text-dim);text-decoration:none">+ Attach receipt</a>
+                    )}
+                  </div>
                 </div>
-                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.125rem">
-                  {p.date}{p.source ? ` · ${p.source}` : ''}
-                </div>
-                {p.notes && <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.125rem">{p.notes}</div>}
+                <form method="POST">
+                  <input type="hidden" name="_action" value="delete_purchase" />
+                  <input type="hidden" name="purchaseId" value={p.id} />
+                  <button type="submit" class="btn-delete" title="Remove purchase (reverses quantity)">✕</button>
+                </form>
               </div>
-              <form method="POST">
-                <input type="hidden" name="_action" value="delete_purchase" />
-                <input type="hidden" name="purchaseId" value={p.id} />
-                <button type="submit" class="btn-delete" title="Remove purchase (reverses quantity)">✕</button>
-              </form>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

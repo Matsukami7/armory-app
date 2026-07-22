@@ -288,6 +288,19 @@ export const arBuilds = sqliteTable('ar_builds', {
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
 
+export const receipts = sqliteTable('receipts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull(),
+  vendor: text('vendor'),
+  total: real('total').notNull(),
+  category: text('category').notNull().default('other'), // ammo | range_fee | gear | firearm | accessory | other
+  photoPath: text('photo_path'),
+  notes: text('notes'),
+  sessionId: integer('session_id').references(() => rangeSessions.id, { onDelete: 'set null' }),
+  ammoPurchaseId: integer('ammo_purchase_id').references(() => ammoPurchases.id, { onDelete: 'set null' }),
+  createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
+});
+
 export const arBuildParts = sqliteTable('ar_build_parts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   buildId: integer('build_id').notNull().references(() => arBuilds.id, { onDelete: 'cascade' }),

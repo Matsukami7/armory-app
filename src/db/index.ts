@@ -280,6 +280,19 @@ sqlite.exec(`
     created_at TEXT NOT NULL DEFAULT 'CURRENT_TIMESTAMP'
   );
 
+  CREATE TABLE IF NOT EXISTS receipts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    vendor TEXT,
+    total REAL NOT NULL,
+    category TEXT NOT NULL DEFAULT 'other',
+    photo_path TEXT,
+    notes TEXT,
+    session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL,
+    ammo_purchase_id INTEGER REFERENCES ammo_purchases(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS ar_build_parts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     build_id INTEGER NOT NULL REFERENCES ar_builds(id) ON DELETE CASCADE,

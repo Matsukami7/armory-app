@@ -4,6 +4,17 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.4.0] — 2026-07-21
+
+### Added
+- **Receipts** (`/receipts`) — expense tracking for range trips and purchases
+  - Log a receipt with date, vendor, total, category (ammo/range fee/gear/firearm/accessory/other), photo/PDF, and notes
+  - Link a receipt to a range session or an ammo purchase; linked receipts surface inline on the session detail and ammo purchase log pages
+  - Sidebar nav entry under Reports
+- **NFA Item firearm type** — added "NFA Item" alongside "Other" as a firearm category, available when adding/editing a firearm and in the vault filter tabs
+
+---
+
 ## [1.3.1] — 2026-07-11
 
 ### Added

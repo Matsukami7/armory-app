@@ -48,8 +48,11 @@ if (Astro.request.method === 'POST') {
       <div>
         <label>Type *</label>
         <select name="type" required>
-          {['pistol','rifle','shotgun','revolver','other'].map(t => (
-            <option value={t} selected={firearm.type === t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+          {[
+            ['pistol', 'Pistol'], ['rifle', 'Rifle'], ['shotgun', 'Shotgun'],
+            ['revolver', 'Revolver'], ['nfa', 'NFA Item'], ['other', 'Other'],
+          ].map(([t, label]) => (
+            <option value={t} selected={firearm.type === t}>{label}</option>
           ))}
         </select>
       </div>
