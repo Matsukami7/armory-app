@@ -4,6 +4,17 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.5.0] — 2026-07-22
+
+### Added
+- **USPSA Matches** (`/matches`) — manual-entry match/stage tracker for USPSA competitors
+  - Log a match with overall place/%, points lost, hit factor totals, and A/C/D/M/NS counts, matching the fields shown in the PractiScore app
+  - Add stages one at a time with place/%, hit factor, time, and hit counts; % trend chart across matches
+  - Attach video per-stage or match-wide (upload a file or paste a YouTube/Vimeo link) — clips also show up in the Footage library linked back to their match
+  - Sidebar nav entry "Matches"
+
+---
+
 ## [1.4.0] — 2026-07-21
 
 ### Added
