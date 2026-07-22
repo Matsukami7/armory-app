@@ -4,6 +4,16 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.5.1] — 2026-07-22
+
+### Security
+- **Fixed a full authentication bypass.** The session cookie previously checked against a hardcoded, publicly-known constant value rather than a real secret — anyone who could reach an Armory instance over the network could bypass login entirely by setting `armory_session=authenticated`, without ever knowing `ARMORY_PASSWORD`. Sessions now use a random, per-install secret generated on first run and persisted in `data/`, compared with a constant-time check.
+- Password comparison now uses a constant-time comparison instead of `===`, closing a theoretical timing side-channel.
+- Re-enabled Astro's built-in CSRF Origin-header check (previously disabled in `astro.config.mjs`).
+- **Upgrading is strongly recommended for everyone**, especially anyone exposing Armory beyond localhost (even behind a reverse proxy/VPN, since anyone with access to that network segment could previously have bypassed login). Existing sessions will be invalidated by this update — you'll need to log in again with your password.
+
+---
+
 ## [1.5.0] — 2026-07-22
 
 ### Added
