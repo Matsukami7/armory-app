@@ -301,6 +301,23 @@ document.addEventListener('change', async (e) => {
   dt.items.add(resized);
   input.files = dt.files;
 });
+
+// Give every form submission a visual cue — forms are plain POSTs with a full-page
+// redirect after, so without this a large file upload just looks frozen.
+document.addEventListener('submit', (e) => {
+  const form = e.target as HTMLFormElement;
+  if (!(form instanceof HTMLFormElement) || e.defaultPrevented) return;
+
+  const btn = (e.submitter as HTMLButtonElement | null) ?? form.querySelector<HTMLButtonElement>('button[type="submit"], button:not([type])');
+  if (!btn || btn.disabled) return;
+
+  const isUpload = form.enctype === 'multipart/form-data'
+    && [...form.querySelectorAll<HTMLInputElement>('input[type="file"]')].some(i => i.files?.length);
+
+  btn.dataset.originalHtml = btn.innerHTML;
+  btn.innerHTML = `<span class="btn-spinner"></span> ${isUpload ? 'Uploading…' : 'Saving…'}`;
+  btn.disabled = true;
+});
 </script>
 
 </body>

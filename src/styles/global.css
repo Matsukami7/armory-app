@@ -414,6 +414,18 @@
   .btn-lg { padding: 0.75rem 1.5rem; font-size: 0.8125rem; }
   .btn-full { width: 100%; }
 
+  .btn-spinner {
+    display: inline-block;
+    width: 0.875em;
+    height: 0.875em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes btn-spin { to { transform: rotate(360deg); } }
+
   /* ── Stat cards ── */
   .stat-card {
     background: var(--bg-card);

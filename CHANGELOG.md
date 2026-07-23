@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.6.0] — 2026-07-22
+
+### Added
+- **Submit feedback on every form** — clicking any submit button now disables it and shows a spinner ("Saving…" or "Uploading…" for file uploads) until the page navigates. Forms are plain POSTs with a full-page redirect after, so large video uploads previously looked frozen with no indication anything was happening.
+
+---
+
 ## [1.5.2] — 2026-07-22
 
 ### Fixed
