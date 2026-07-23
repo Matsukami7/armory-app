@@ -4,6 +4,14 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.8.0] — 2026-07-23
+
+### Added
+- **Footage library grouped by match/session.** Clips are now collapsed under their parent match or session (most recent first) instead of one long flat list — a match's stage clips collapse into a single "N clips" section. Match clips are labeled by stage automatically. Unlinked clips get their own group at the bottom.
+- **Filter tabs** (All / Matches / Sessions / Unlinked) to jump straight to a category.
+
+---
+
 ## [1.7.1] — 2026-07-23
 
 ### Added
