@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.7.1] — 2026-07-23
+
+### Added
+- **Backfill rounds fired on existing matches.** Matches logged before v1.7.0 can now have firearm/rounds/ammo added retroactively from the Edit page — it links a session the same way match creation does. Once linked, the fields are replaced with a link to the session to prevent double-logging rounds or double-deducting ammo.
+
+---
+
 ## [1.7.0] — 2026-07-23
 
 ### Added
