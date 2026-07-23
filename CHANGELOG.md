@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.7.0] — 2026-07-23
+
+### Added
+- **USPSA match rounds now count like a range session.** Logging a match with a single firearm/rounds-fired/ammo used now auto-creates (or appends to) a range session for that date, exactly like Quick Log — so match rounds count toward lifetime rounds, barrel wear tracking, and ammo spend automatically. The match detail page shows the firearm, ammo, and rounds fired, with a link back to the linked session.
+
+---
+
 ## [1.6.0] — 2026-07-22
 
 ### Added

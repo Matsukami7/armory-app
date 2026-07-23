@@ -73,6 +73,7 @@ const MATCH_LEVEL_LABEL: Record<string, string> = {
                 <span style="font-size:0.8125rem;color:var(--text-muted)">{m.date}</span>
                 {m.location && <span class="pill pill-default">{m.location}</span>}
                 {m.division && <span class="pill pill-default">{m.division}</span>}
+                {m.roundsFired != null && <span class="pill" style="background:rgba(249,115,22,0.08);color:#f97316;border:1px solid rgba(249,115,22,0.2)">{m.roundsFired} rds</span>}
               </div>
             </div>
             {(m.overallPlace != null || m.overallPercent != null) && (

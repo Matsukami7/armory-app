@@ -1,18 +1,44 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { uspsaMatches } from '../../db/schema';
-import { isNotNull } from 'drizzle-orm';
+import { uspsaMatches, firearms, ammoInventory, rangeSessions, sessionFirearms } from '../../db/schema';
+import { isNotNull, eq, sql } from 'drizzle-orm';
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   const num = (key: string) => form.get(key) ? parseFloat(form.get(key) as string) : null;
   const int = (key: string) => form.get(key) ? parseInt(form.get(key) as string) : null;
 
+  const matchDate = form.get('date') as string;
+  const matchLocation = form.get('location') as string || null;
+  const firearmId = int('firearmId');
+  const roundsFired = int('roundsFired');
+  const ammoId = int('ammoId');
+
+  let linkedSessionId: number | null = null;
+  if (firearmId && roundsFired && roundsFired > 0) {
+    // Find or create a session for the match date, same convention as Quick Log —
+    // this is what makes match rounds count toward lifetime rounds, barrel wear, and ammo spend.
+    const [existing] = await db.select().from(rangeSessions).where(eq(rangeSessions.date, matchDate)).limit(1);
+    if (existing) {
+      linkedSessionId = existing.id;
+      if (matchLocation && !existing.location) {
+        await db.update(rangeSessions).set({ location: matchLocation }).where(eq(rangeSessions.id, linkedSessionId));
+      }
+    } else {
+      const [session] = await db.insert(rangeSessions).values({ date: matchDate, location: matchLocation }).returning({ id: rangeSessions.id });
+      linkedSessionId = session.id;
+    }
+    await db.insert(sessionFirearms).values({ sessionId: linkedSessionId, firearmId, roundsFired, ammoId });
+    if (ammoId) {
+      await db.run(sql`UPDATE ammo_inventory SET quantity = MAX(0, quantity - ${roundsFired}) WHERE id = ${ammoId}`);
+    }
+  }
+
   const [inserted] = await db.insert(uspsaMatches).values({
     name:           form.get('name') as string,
-    date:           form.get('date') as string,
-    location:       form.get('location') as string || null,
+    date:           matchDate,
+    location:       matchLocation,
     division:       form.get('division') as string || null,
     matchLevel:     form.get('matchLevel') as string || null,
     overallPlace:   int('overallPlace'),
@@ -26,6 +52,10 @@ if (Astro.request.method === 'POST') {
     countD:         int('countD'),
     countM:         int('countM'),
     countNs:        int('countNs'),
+    firearmId,
+    ammoId,
+    roundsFired,
+    sessionId:      linkedSessionId,
     notes:          form.get('notes') as string || null,
   }).returning({ id: uspsaMatches.id });
   return Astro.redirect(`/matches/${inserted.id}`);
@@ -37,6 +67,9 @@ const pastDivisions = [...new Set([
   ...divisionRows.map(r => r.division as string),
   'Open', 'Limited', 'Limited 10', 'PCC', 'Carry Optics', 'Production', 'Single Stack', 'Revolver', 'Limited Optics',
 ])].sort();
+
+const allFirearms = await db.select().from(firearms).orderBy(firearms.name);
+const allAmmo = await db.select().from(ammoInventory).where(sql`quantity > 0`).orderBy(ammoInventory.caliber);
 ---
 
 <Layout title="Log Match" backHref="/matches">
@@ -92,6 +125,29 @@ const pastDivisions = [...new Set([
       </div>
     </div>
 
+    <div style="border:1px solid var(--border);border-radius:0.5rem;padding:1rem;display:flex;flex-direction:column;gap:0.75rem">
+      <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted)">
+        Log Rounds Fired <span style="text-transform:none;font-weight:400">(optional — single firearm; counts toward lifetime rounds, barrel wear, and ammo spend like a range session)</span>
+      </div>
+      <div>
+        <label>Firearm</label>
+        <select name="firearmId" id="m-firearm" onchange="mFilterAmmo()">
+          <option value="">— None —</option>
+          {allFirearms.map(f => <option value={f.id} data-caliber={f.caliber}>{f.name} ({f.caliber})</option>)}
+        </select>
+      </div>
+      <div class="form-row form-row-2">
+        <div><label>Rounds Fired</label><input name="roundsFired" type="number" min="1" placeholder="150" /></div>
+        <div>
+          <label>Ammo Used</label>
+          <select name="ammoId" id="m-ammo">
+            <option value="">None</option>
+            {allAmmo.map(a => <option value={a.id} data-caliber={a.caliber}>{a.brand} {a.grain ? `${a.grain}gr ` : ''}{a.caliber} — {a.quantity.toLocaleString()} in stock</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
+
     <div><label>Notes</label><textarea name="notes" rows="3" placeholder="Squad, conditions, gear used..."></textarea></div>
 
     <p style="font-size:0.75rem;color:var(--text-muted)">Stages and video can be added after saving.</p>
@@ -99,3 +155,17 @@ const pastDivisions = [...new Set([
     <button type="submit" class="btn btn-primary btn-full">Create Match</button>
   </form>
 </Layout>
+
+<script>
+  function mFilterAmmo() {
+    const firearmSel = document.getElementById('m-firearm') as HTMLSelectElement | null;
+    const ammoSel = document.getElementById('m-ammo') as HTMLSelectElement | null;
+    if (!firearmSel || !ammoSel) return;
+    const caliber = firearmSel.options[firearmSel.selectedIndex]?.dataset?.caliber ?? '';
+    Array.from(ammoSel.options).forEach(opt => {
+      if (!opt.value) return;
+      opt.hidden = caliber ? opt.dataset.caliber !== caliber : false;
+    });
+    if (ammoSel.options[ammoSel.selectedIndex]?.hidden) ammoSel.value = '';
+  }
+</script>

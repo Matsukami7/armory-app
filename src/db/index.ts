@@ -143,6 +143,10 @@ sqlite.exec(`
     count_d INTEGER,
     count_m INTEGER,
     count_ns INTEGER,
+    firearm_id INTEGER REFERENCES firearms(id) ON DELETE SET NULL,
+    ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL,
+    rounds_fired INTEGER,
+    session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL,
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -388,6 +392,12 @@ if (!drillColumns.includes('par_time')) sqlite.exec("ALTER TABLE drills ADD COLU
 const footageColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('footage')").all() as { name: string }[]).map(r => r.name);
 if (!footageColumns.includes('uspsa_match_id')) sqlite.exec("ALTER TABLE footage ADD COLUMN uspsa_match_id INTEGER REFERENCES uspsa_matches(id) ON DELETE SET NULL");
 if (!footageColumns.includes('uspsa_stage_id')) sqlite.exec("ALTER TABLE footage ADD COLUMN uspsa_stage_id INTEGER REFERENCES uspsa_stages(id) ON DELETE SET NULL");
+
+const uspsaMatchColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('uspsa_matches')").all() as { name: string }[]).map(r => r.name);
+if (!uspsaMatchColumns.includes('firearm_id'))   sqlite.exec("ALTER TABLE uspsa_matches ADD COLUMN firearm_id INTEGER REFERENCES firearms(id) ON DELETE SET NULL");
+if (!uspsaMatchColumns.includes('ammo_id'))      sqlite.exec("ALTER TABLE uspsa_matches ADD COLUMN ammo_id INTEGER REFERENCES ammo_inventory(id) ON DELETE SET NULL");
+if (!uspsaMatchColumns.includes('rounds_fired')) sqlite.exec("ALTER TABLE uspsa_matches ADD COLUMN rounds_fired INTEGER");
+if (!uspsaMatchColumns.includes('session_id'))   sqlite.exec("ALTER TABLE uspsa_matches ADD COLUMN session_id INTEGER REFERENCES range_sessions(id) ON DELETE SET NULL");
 
 export const db = drizzle(sqlite, { schema });
 export type DB = typeof db;

@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
-import { uspsaMatches, uspsaStages, footage } from '../../db/schema';
+import { uspsaMatches, uspsaStages, footage, firearms, ammoInventory } from '../../db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { saveUpload, embedUrl } from '../../lib/uploads';
 
@@ -79,6 +79,13 @@ for (const v of videos) {
 
 const nextStageNumber = (stages[stages.length - 1]?.stageNumber ?? 0) + 1;
 
+const [matchFirearm] = match.firearmId
+  ? await db.select({ name: firearms.name }).from(firearms).where(eq(firearms.id, match.firearmId))
+  : [null];
+const [matchAmmo] = match.ammoId
+  ? await db.select({ brand: ammoInventory.brand, grain: ammoInventory.grain, caliber: ammoInventory.caliber }).from(ammoInventory).where(eq(ammoInventory.id, match.ammoId))
+  : [null];
+
 function renderVideo(v: typeof videos[number]) {
   const embed = v.externalUrl ? embedUrl(v.externalUrl) : null;
   return { v, embed };
@@ -141,7 +148,26 @@ function renderVideo(v: typeof videos[number]) {
           </div>
         </div>
       )}
+      {match.roundsFired != null && (
+        <div class="stat-card">
+          <div>
+            <div class="stat-card-label">Rounds Fired</div>
+            <div class="stat-card-value" style="color:#f97316">{match.roundsFired.toLocaleString()}</div>
+            {matchFirearm && <div class="stat-card-sub">{matchFirearm.name}</div>}
+          </div>
+        </div>
+      )}
     </div>
+
+    {(match.roundsFired != null || match.sessionId) && (
+      <div class="card" style="padding:1rem 1.25rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div style="font-size:0.8125rem;color:var(--text-muted)">
+          {matchFirearm && <span style="color:var(--text);font-weight:600">{matchFirearm.name}</span>}
+          {matchAmmo && <span> · {matchAmmo.brand} {matchAmmo.grain ? `${matchAmmo.grain}gr ` : ''}{matchAmmo.caliber}</span>}
+        </div>
+        {match.sessionId && <a href={`/sessions/${match.sessionId}`} style="font-size:0.75rem;color:var(--accent);text-decoration:none">View Session →</a>}
+      </div>
+    )}
 
     {match.notes && (
       <div class="card" style="padding:1.25rem">

@@ -150,6 +150,10 @@ export const uspsaMatches = sqliteTable('uspsa_matches', {
   countD: integer('count_d'),
   countM: integer('count_m'),
   countNs: integer('count_ns'),
+  firearmId: integer('firearm_id').references(() => firearms.id, { onDelete: 'set null' }),
+  ammoId: integer('ammo_id').references(() => ammoInventory.id, { onDelete: 'set null' }),
+  roundsFired: integer('rounds_fired'),
+  sessionId: integer('session_id').references(() => rangeSessions.id, { onDelete: 'set null' }),
   notes: text('notes'),
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
 });
