@@ -7,6 +7,7 @@ export const firearms = sqliteTable('firearms', {
   model: text('model').notNull(),
   caliber: text('caliber').notNull(),
   serial: text('serial'),
+  nsn: text('nsn'),
   generation: text('generation'),
   type: text('type').notNull(), // pistol, rifle, shotgun, revolver, other
   purchaseDate: text('purchase_date'),

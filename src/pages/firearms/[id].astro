@@ -319,6 +319,12 @@ const barrelWarn   = barrelPct != null && barrelPct >= 80;
             <div style="font-family:ui-monospace,monospace;font-size:0.875rem;color:var(--text)">{gun.serial}</div>
           </div>
         )}
+        {gun.nsn && (
+          <div class="card" style="padding:1rem">
+            <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem">NSN</div>
+            <div style="font-family:ui-monospace,monospace;font-size:0.875rem;color:var(--text)">{gun.nsn}</div>
+          </div>
+        )}
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <span class="pill pill-accent">{typeLabel[gun.type] ?? gun.type}</span>
           <span class="pill pill-default">{gun.caliber}</span>

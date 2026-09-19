@@ -13,7 +13,7 @@ if (q.length >= 2) {
   const like = `%${q}%`;
 
   const guns = await db.select().from(firearms).where(
-    sql`name LIKE ${like} OR make LIKE ${like} OR model LIKE ${like} OR caliber LIKE ${like} OR serial LIKE ${like} OR notes LIKE ${like}`
+    sql`name LIKE ${like} OR make LIKE ${like} OR model LIKE ${like} OR caliber LIKE ${like} OR serial LIKE ${like} OR nsn LIKE ${like} OR notes LIKE ${like}`
   );
   for (const g of guns) {
     results.push({ type: 'Firearm', label: g.name, sub: `${g.make} ${g.model} · ${g.caliber}`, href: `/firearms/${g.id}` });

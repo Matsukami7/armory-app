@@ -20,6 +20,7 @@ sqlite.exec(`
     model TEXT NOT NULL,
     caliber TEXT NOT NULL,
     serial TEXT,
+    nsn TEXT,
     generation TEXT,
     type TEXT NOT NULL,
     purchase_date TEXT,
@@ -370,6 +371,7 @@ if (!firearmColumns.includes('transfer_price'))          sqlite.exec("ALTER TABL
 if (!firearmColumns.includes('transfer_notes'))          sqlite.exec("ALTER TABLE firearms ADD COLUMN transfer_notes TEXT");
 if (!firearmColumns.includes('barrel_round_count'))      sqlite.exec("ALTER TABLE firearms ADD COLUMN barrel_round_count INTEGER NOT NULL DEFAULT 0");
 if (!firearmColumns.includes('barrel_rated_rounds'))     sqlite.exec("ALTER TABLE firearms ADD COLUMN barrel_rated_rounds INTEGER");
+if (!firearmColumns.includes('nsn'))                     sqlite.exec("ALTER TABLE firearms ADD COLUMN nsn TEXT");
 
 const ammoColumns = (sqlite.prepare("SELECT name FROM pragma_table_info('ammo_inventory')").all() as { name: string }[]).map(r => r.name);
 if (!ammoColumns.includes('low_stock_threshold'))        sqlite.exec("ALTER TABLE ammo_inventory ADD COLUMN low_stock_threshold INTEGER NOT NULL DEFAULT 0");
