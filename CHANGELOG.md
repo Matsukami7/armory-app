@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.8.2] — 2026-09-19
+
+### Changed
+- **Serial Number is now required unless marked "No Serial Number."** Distinguishes firearms that genuinely lack a serial (homemade/80% builds, pre-1968) from records where the serial just hasn't been entered yet. Checking the box disables and clears the field; the detail page shows an explicit "No Serial Number" label instead of leaving it blank.
+
+---
+
 ## [1.8.1] — 2026-09-19
 
 ### Added
