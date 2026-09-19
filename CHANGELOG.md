@@ -4,6 +4,13 @@ All notable changes to Armory are documented here.
 
 ---
 
+## [1.8.1] — 2026-09-19
+
+### Added
+- **NSN field on firearms.** Optional National Stock Number field alongside Serial Number, for homemade/80% builds and pre-1968 firearms that use an NSN instead of a manufacturer serial. Shown on the firearm detail page and included in global search.
+
+---
+
 ## [1.8.0] — 2026-07-23
 
 ### Added
