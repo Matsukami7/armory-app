@@ -313,10 +313,12 @@ const barrelWarn   = barrelPct != null && barrelPct >= 80;
             </div>
           </div>
         )}
-        {gun.serial && (
+        {(gun.serial || gun.noSerial) && (
           <div class="card" style="padding:1rem">
             <div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem">Serial</div>
-            <div style="font-family:ui-monospace,monospace;font-size:0.875rem;color:var(--text)">{gun.serial}</div>
+            <div style="font-family:ui-monospace,monospace;font-size:0.875rem;color:var(--text)">
+              {gun.noSerial ? <span style="font-style:italic;color:var(--text-muted)">No Serial Number</span> : gun.serial}
+            </div>
           </div>
         )}
         {gun.nsn && (

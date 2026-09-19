@@ -11,6 +11,7 @@ if (Astro.request.method === 'POST') {
     model:         form.get('model') as string,
     caliber:       form.get('caliber') as string,
     serial:        form.get('serial') as string || null,
+    noSerial:      form.get('noSerial') === 'on',
     nsn:           form.get('nsn') as string || null,
     generation:    form.get('generation') as string || null,
     type:          form.get('type') as string,
@@ -48,7 +49,14 @@ if (Astro.request.method === 'POST') {
     </div>
 
     <div class="form-row form-row-2">
-      <div><label>Serial Number</label><input name="serial" type="text" placeholder="Optional" /></div>
+      <div>
+        <label>Serial Number *</label>
+        <input id="serial-input" name="serial" type="text" required placeholder="e.g. ABC1234" />
+        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;text-transform:none;letter-spacing:normal;font-size:0.8rem;font-weight:400;cursor:pointer">
+          <input id="no-serial-checkbox" name="noSerial" type="checkbox" style="width:auto" />
+          <span>No Serial Number</span>
+        </label>
+      </div>
       <div><label>Generation</label><input name="generation" type="text" placeholder="e.g. Gen 5" /></div>
     </div>
 
@@ -66,3 +74,15 @@ if (Astro.request.method === 'POST') {
     <button type="submit" class="btn btn-primary btn-full">Save Firearm</button>
   </form>
 </Layout>
+
+<script>
+  const cb = document.getElementById('no-serial-checkbox') as HTMLInputElement;
+  const input = document.getElementById('serial-input') as HTMLInputElement;
+  function sync() {
+    input.required = !cb.checked;
+    input.disabled = cb.checked;
+    if (cb.checked) input.value = '';
+  }
+  cb.addEventListener('change', sync);
+  sync();
+</script>
